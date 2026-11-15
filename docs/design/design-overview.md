@@ -3,7 +3,7 @@
 - **Mã đối tượng truy vết:** `OVW-01` (gồm các mục tiêu `ASR-G1`..`ASR-G9`, ràng buộc `CON-01`..`CON-05`, đầu vào `IN-01`..`IN-10` và giả định `ASM-01`..`ASM-09`)
 - **Issue liên quan:** `#8` — 3.0.1 Xác định mục tiêu, ràng buộc và đầu vào thiết kế
 - **Người chịu trách nhiệm chính:** Nguyễn Minh Trí (`@nmt1206`)
-- **Người kiểm tra:** Khoa (`@buikhoa130406` — kiểm tra baseline và phạm vi); Vĩ (`@Lysivi2005`) & Khôi (`@KhoiVuong2210` — cung cấp/xác nhận ràng buộc kỹ thuật).
+- **Người kiểm tra:**Khoa (@buikhoa130406 — kiểm tra baseline, phạm vi và phụ trách thử kết nối #7); Vĩ (@Lysivi2005 — cung cấp/xác nhận ràng buộc kỹ thuật kiến trúc, lớp, UI và API #12).
 
 ---
 
@@ -58,9 +58,9 @@ Ràng buộc kỹ thuật riêng của Vĩ (frontend, UI) và Khôi (API, CSDL, 
 | :--- | :--- | :--- | :--- |
 | **`IN-05`** | Kiến trúc, thành phần, triển khai (3.1.1) | Vĩ | Sequence dùng các thành phần tạm: Page, Controller, Service, Database |
 | **`IN-06`** | Class diagram và thao tác (3.3.2) | Vĩ | Tên Service/operation ở `SEQ-OPS` là tạm; Vĩ đối chiếu khi review |
-| **`IN-07`** | ERD, ràng buộc và cơ chế chống trùng slot (3.1.2) | Khôi | Domain model và state machine chỉ nêu **yêu cầu** với dữ liệu; Khôi quyết cơ chế |
-| **`IN-08`** | Danh sách API, mã lỗi (3.1.4); ràng buộc kỹ thuật riêng của Vĩ/Khôi | Khôi, Vĩ | Sequence chỉ nêu kết quả nghiệp vụ (ví dụ `SelectionInvalid`, `ConfirmRejected`), không cố định mã HTTP |
-| **`IN-09`** | Kết quả thử React–API–PostgreSQL, kiểm chứng concurrency và hết hạn (2.3.1) | Khôi | Mốc "nhả trong 5 giây" ở `ASR-G2` ghi là yêu cầu cần kiểm chứng |
+| **`IN-07`** | ERD, ràng buộc và cơ chế chống trùng slot (3.1.2) |  | Domain model và state machine chỉ nêu **yêu cầu** với dữ liệu; Khôi quyết cơ chế |
+| **`IN-08`** | Danh sách API, mã lỗi (3.1.4); ràng buộc kỹ thuật riêng của Vĩ |Vĩ | Sequence chỉ nêu kết quả nghiệp vụ (ví dụ `SelectionInvalid`, `ConfirmRejected`), không cố định mã HTTP |
+| **`IN-09`** | Kết quả thử React–API–PostgreSQL, kiểm chứng concurrency và hết hạn (2.3.1) |  | Mốc "nhả trong 5 giây" ở `ASR-G2` ghi là yêu cầu cần kiểm chứng |
 | **`IN-10`** | Xác nhận các giả định `ASM-01`..`ASM-09` | Khoa, Khôi, Vĩ | Xem mục 4 |
 
 ---
@@ -122,5 +122,4 @@ Các mã **không** được đề cập trực tiếp ở 2.1 (ví dụ FR-12, 
   2. **Đề xuất** không lưu `Completed` thành trạng thái vật lý của `Booking`, suy ra từ thời gian (`now >= latestEndTime`) để giảm rủi ro đồng bộ trạng thái; chờ đối chiếu với dữ liệu, vòng đời booking và giao diện.
   3. Dùng phương án tạm cho các điểm PA2 chưa rõ (`ASM-01`..`ASM-09`) thay vì dừng việc.
 - **Điểm còn mở cần người kiểm tra xác nhận:**
-  - `@buikhoa130406`: xác nhận cách gom ASR, bảng bao phủ đã thu hẹp, các giả định `ASM-01`..`ASM-04`, `ASM-07`, `ASM-09` và việc chưa phát sinh thay đổi yêu cầu.
-  - `@Lysivi2005` & `@KhoiVuong2210`: xác nhận `ASM-05`, `ASM-06`, `ASM-08`, đề xuất suy ra nhãn "Đã hoàn thành" và cung cấp ràng buộc kỹ thuật riêng (`IN-08`); xác nhận các yêu cầu ở cột "Tác động thiết kế" khớp kiến trúc (3.1.1) và dữ liệu/API (3.1.2, 3.1.4).
+   Trí đối chiếu với #10, Vĩ đối chiếu với #12, #29, #31, và Khoa xác nhận baseline cùng kết quả thử nghiệm #7.
