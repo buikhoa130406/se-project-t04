@@ -2,7 +2,7 @@
 
 - **Mã đối tượng truy vết:** `ARC-01` (Kiến trúc tổng thể), `C4-CTX` (Level 1 Context), `C4-CNT` (Level 2 Container), `C4-CMP` (Level 3 Component), `C4-DEP` (Level 4 Deployment), `ARC-MAP` (Ánh xạ NFR & Quy tắc)
 - **Người thực hiện:** Lý Sĩ Vĩ (`@Lysivi2005`)
-- **Người kiểm tra:** Khôi (`@KhoiVuong2210` — khả năng hiện thực), Khoa (`@buikhoa130406` — độ bao phủ yêu cầu)
+- **Người kiểm tra:** Trí (`@nmt1206` — đối chiếu dữ liệu `#10`), Vĩ (`@Lysivi2005` — đầu mối API `#12`), Khoa (`@buikhoa130406` — độ bao phủ yêu cầu & cập nhật `ADR-002`)
 - **Tài liệu đầu vào:** Baseline PA2 (`pa/PA2/T04-PA2-SoftwareRequirementsSpecification.docx`), `docs/design/README.md`, `docs/design/design-overview.md` (`OVW-01`, `ASR-G1`..`ASR-G9`, `CON-01`..`CON-05`)
 
 ---
@@ -149,8 +149,9 @@ flowchart LR
 - **Danh sách sản phẩm:** `docs/design/architecture/architecture-design.md` (Mã đối tượng: `ARC-01`, `C4-CTX`, `C4-CNT`, `C4-CMP`, `C4-DEP`, `ARC-MAP`).
 - **Kết quả tự kiểm tra:**
   - [x] Bao phủ đủ Architecture Style + lý do, 4 cấp C4 (Context, Container, Component, Deployment) và ánh xạ NFR/quy tắc PA2.
-  - [x] Khớp hoàn toàn với `ADR-001`, `ADR-002`, `ADR-003` và mục tiêu `ASR-G1`..`ASR-G9`, `CON-01`..`CON-05`.
+  - [x] Khớp định hướng `ADR-001`, `ADR-002`, `ADR-003` và mục tiêu `ASR-G1`..`ASR-G9`, `CON-01`..`CON-05` (**còn chờ `#10` và `ADR-002` xác nhận** cơ chế chống trùng slot chi tiết — khóa dòng hay ràng buộc duy nhất — và đo kiểm chứng mốc nhả $\le 5\text{s}$).
   - [x] Làm rõ ranh giới `Hold Expiry Worker` (`ReleaseJob`) và cơ chế phát hiện đóng tab `FR-26`.
-- **Điểm cần người kiểm tra xác nhận:**
-  - `@KhoiVuong2210`: xác nhận khả năng triển khai `Hold Expiry Worker` (chu kỳ $\le 1\text{s}$), Connection Pool và ranh giới Transaction với PostgreSQL (`3.1.2`, `3.1.4`).
-  - `@buikhoa130406`: xác nhận độ bao phủ yêu cầu PA2 và ánh xạ mã đối tượng `ARC-*`, `C4-*` trong bảng truy vết (`#15`, `#11`).
+- **Điểm cần người kiểm tra xác nhận & Các điểm còn mở:**
+  - `@nmt1206` (Trí — đầu mối dữ liệu `#10`): đối chiếu cơ chế chống trùng slot, ranh giới PostgreSQL Transaction và trạng thái Hold trong `#10`.
+  - `@Lysivi2005` (Vĩ — đầu mối API `#12`): đối chiếu phản hồi giải phóng Hold (`Releasing` / `ReleaseFailed` / `Released`) và lỗi thực tế trong API `#12`.
+  - `@buikhoa130406` (Khoa): đối chiếu các quyết định trên khi cập nhật `ADR-002` và xác nhận độ bao phủ yêu cầu PA2 / bảng truy vết (`#15`, `#11`).
