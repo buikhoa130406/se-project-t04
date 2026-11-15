@@ -1,16 +1,17 @@
 # Thiết kế Lớp và Đặc tả các Lớp Quan trọng (Task 3.3.2 — Issue #18)
 
+- **Mã đối tượng truy vết:** `CLS-DIAG` (Biểu đồ lớp), `CLS-01`..`CLS-08` (Đặc tả 8 lớp trọng yếu), `CLS-MAP` (Ánh xạ Domain Model `3.3.1` & Sequence `3.3.3`)
 - **Người thực hiện:** Lý Sĩ Vĩ (`@Lysivi2005`)
 - **Người kiểm tra:** Khôi (`@KhoiVuong2210` — khả năng hiện thực, kiểu dữ liệu, thao tác), Trí (`@nmt1206` — trách nhiệm nghiệp vụ)
-- **Tài liệu đầu vào:** Baseline PA2 (`T04-PA2-SoftwareRequirementsSpecification.docx`), Kiến trúc `docs/design/architecture/architecture-design.md` (Task 3.1.1)
+- **Tài liệu đầu vào:** Baseline PA2 (`pa/PA2/T04-PA2-SoftwareRequirementsSpecification.docx`), Kiến trúc `docs/design/architecture/architecture-design.md` (`3.1.1`), Domain Model `docs/design/domain/domain-model.md` (`3.3.1`), Sequence & State (`3.3.3`, `3.3.4`)
 
-> **Lưu ý đồng bộ:** Thiết kế lớp bám sát kiến trúc **Modular Monolith (Controller $\rightarrow$ Service $\rightarrow$ Repository)** đã chốt ở `3.1.1` và các quy tắc nghiệp vụ PA2 (khung 30 phút, giữ chỗ 5 phút All-or-Nothing, tự động xác nhận, hủy $\ge 3$ giờ, chặn lịch $\ge 24$ giờ, thông báo In-app, không thanh toán trực tuyến).
+> **Lưu ý đồng bộ:** Thiết kế lớp bám sát kiến trúc **Modular Monolith (`Controller -> Service -> Repository`)** đã chốt ở `3.1.1`, đồng bộ khái niệm với Domain Model `DM-01` (`3.3.1`) và giữ chặt phạm vi PA2 (khung 30 phút, giữ chỗ 5 phút All-or-Nothing, tự động xác nhận, hủy $\ge 3$ giờ, chặn lịch $\ge 24$ giờ, thông báo In-app không có `isRead`, mỗi cơ sở 1 môn thể thao, không thanh toán trực tuyến).
 
 ---
 
-## 1. Biểu đồ Lớp (Class Diagram)
+## 1. Biểu đồ Lớp (`CLS-DIAG`)
 
-Biểu đồ gồm **các lớp thực thể miền (Domain Entities)** và **các lớp dịch vụ nghiệp vụ cốt lõi (Domain/Application Services)** trong Backend:
+Biểu đồ gồm **các lớp thực thể miền (Domain Entities / Value Objects)** và **các lớp dịch vụ điều phối nghiệp vụ cốt lõi (Application/Domain Services)** ở tầng Backend:
 
 ```mermaid
 classDiagram
@@ -46,16 +47,22 @@ classDiagram
         +isOwner() Boolean
     }
 
+    class OperatingHours {
+        +Integer dayOfWeek
+        +Time openTime
+        +Time closeTime
+        +contains(startTime: Time, endTime: Time) Boolean
+    }
+
     class Facility {
         +UUID id
         +UUID ownerId
         +String name
         +String address
         +String district
-        +String[] sports
+        +String sportType
         +String[] amenities
-        +Time openTime
-        +Time closeTime
+        +OperatingHours[] operatingHours
         +Boolean isActive
         +isOwnedBy(userId: UUID) Boolean
         +isWithinOperatingHours(startTime: DateTime, endTime: DateTime) Boolean
@@ -65,7 +72,6 @@ classDiagram
         +UUID id
         +UUID facilityId
         +String courtCode
-        +String sportType
         +Decimal pricePerSlot30m
         +Boolean isActive
         +calculatePrice(slotCount: Integer) Decimal
@@ -100,10 +106,12 @@ classDiagram
         +Boolean isDirectBooking
         +Decimal totalAmount
         +DateTime earliestStartTime
+        +DateTime latestEndTime
         +String cancelReason
         +DateTime createdAt
         +canCancelByPlayer(now: DateTime) Boolean
         +isAffectedUnder24Hours(now: DateTime) Boolean
+        +isCompleted(now: DateTime) Boolean
     }
 
     class BookingItem {
@@ -122,7 +130,6 @@ classDiagram
         +UUID ownerId
         +DateTime startTime
         +DateTime endTime
-        +String reason
         +DateTime createdAt
         +isAtLeast24HoursAhead(now: DateTime) Boolean
         +overlaps(slotStart: DateTime, slotEnd: DateTime) Boolean
@@ -132,11 +139,8 @@ classDiagram
         +UUID id
         +UUID userId
         +UUID relatedBookingId
-        +String title
         +String message
-        +Boolean isRead
         +DateTime createdAt
-        +markAsRead() void
     }
 
     class BookingService {
@@ -161,7 +165,7 @@ classDiagram
         -NotificationService notificationService
         +updateCourtPrice(ownerId: UUID, courtId: UUID, newPrice: Decimal) Court
         +createScheduleBlock(ownerId: UUID, dto: BlockInput) ScheduleBlock
-        +updateOperatingHours(ownerId: UUID, facilityId: UUID, open: Time, close: Time) Facility
+        +updateOperatingHours(ownerId: UUID, facilityId: UUID, hours: OperatingHours[]) Facility
         +deleteCourt(ownerId: UUID, courtId: UUID) void
         +createDirectBooking(ownerId: UUID, facilityId: UUID, selections: CourtSlotSelection[]) Booking
         -assertNoActiveHoldConflict(courtIds: UUID[], start: DateTime, end: DateTime) void
@@ -169,6 +173,7 @@ classDiagram
     }
 
     User "1" --> "0..*" Facility : owns (if OWNER)
+    Facility "1" *-- "1..*" OperatingHours : opens
     Facility "1" *-- "1..*" Court : contains
     User "1" --> "0..*" SlotHold : creates
     Facility "1" --> "0..*" SlotHold : scoped to
@@ -190,11 +195,11 @@ classDiagram
     OwnerScheduleService ..> Notification : creates on owner cancel
 ```
 
-> **Ghi chú kiểu dữ liệu phụ trợ:** `CourtSlotSelection` (`courtId`, `slotStart[]`) và `BlockInput` (`courtId`, `startTime`, `endTime`, `reason`) là các DTO đầu vào tại tầng Controller/Service. Các `*Repository` là interface truy cập dữ liệu ở tầng Repository đã nêu trong kiến trúc `3.1.1`.
+> **Ghi chú kiểu dữ liệu phụ trợ:** `CourtSlotSelection` (`courtId`, `slotStart[]`) và `BlockInput` (`courtId`, `startTime`, `endTime`, `reason`) là các DTO đầu vào tại tầng Controller/Service. Các `*Repository` là interface truy cập dữ liệu ở tầng Repository (`3.1.1`). `NotificationService` và `AuthService` thuộc các module tương ứng đã nêu ở `C4-CMP` (`3.1.1`).
 
 ---
 
-## 2. Đặc tả chi tiết 8 Lớp Quan trọng
+## 2. Đặc tả chi tiết 8 Lớp Quan trọng (`CLS-01`..`CLS-08`)
 
 ### 2.1. [`CLS-01`] Lớp `User`
 - **Vai trò:** Đại diện tài khoản đã đăng ký (`PLAYER` hoặc `OWNER`), phục vụ xác thực và phân quyền theo vai trò (`FR-01`, `NFR-04`, `NFR-05`).
@@ -210,14 +215,15 @@ classDiagram
 
 ---
 
-### 2.2. [`CLS-02`] Lớp `Facility`
+### 2.2. [`CLS-02`] Lớp `Facility` (kèm `OperatingHours`)
 - **Vai trò:** Đại diện một cụm sân / chi nhánh thể thao thuộc một chủ sân duy nhất (`BR-10`, `FR-03`).
 - **Thuộc tính chính:**
   - `id: UUID` — Mã cơ sở.
   - `ownerId: UUID` — Chủ sở hữu (`FK -> User.id`). Chưa hỗ trợ chia sẻ quyền quản lý chéo (`BR-10`).
   - `name: String`, `address: String`, `district: String` — Tên và vị trí phục vụ tìm kiếm (`FR-04`).
-  - `sports: String[]`, `amenities: String[]` — Danh sách môn thể thao và tiện ích để lọc (`FR-05`).
-  - `openTime: Time`, `closeTime: Time` — Khung giờ hoạt động hàng ngày (`FR-18`).
+  - `sportType: String` — Môn thể thao chính của cơ sở (1 cơ sở hỗ trợ đúng 1 môn, khớp `DM-ENT-02`).
+  - `amenities: String[]` — Danh sách tiện ích để lọc (`FR-05`).
+  - `operatingHours: OperatingHours[]` — Giờ mở cửa / đóng cửa theo ngày trong tuần (`dayOfWeek`, `openTime`, `closeTime` — `FR-18`, khớp `DM-ENT-05`).
 - **Phương thức & Trách nhiệm:**
   - `isOwnedBy(userId: UUID): Boolean` — Xác minh quyền sở hữu ở tầng Backend (`NFR-04`).
   - `isWithinOperatingHours(startTime: DateTime, endTime: DateTime): Boolean` — Chặn đặt khung giờ ngoài giờ mở cửa (`FR-32`).
@@ -230,9 +236,8 @@ classDiagram
   - `id: UUID` — Khóa chính sân con.
   - `facilityId: UUID` — Cơ sở chứa sân (`FK -> Facility.id`).
   - `courtCode: String` — Số/mã định danh hiển thị (ví dụ: `S1`, `Sân 2`).
-  - `sportType: String` — Môn thi đấu của sân con.
   - `pricePerSlot30m: Decimal` — Đơn giá theo mỗi khung 30 phút (`FR-07`, `FR-19`).
-  - `isActive: Boolean` — Trạng thái hoạt động (phục vụ ẩn/xóa mềm sân con khi không còn sử dụng).
+  - `isActive: Boolean` — Trạng thái hoạt động (phục vụ ẩn/xóa mềm sân con khi không còn sử dụng mà vẫn giữ lịch sử đơn cũ).
 - **Phương thức & Trách nhiệm:**
   - `calculatePrice(slotCount: Integer): Decimal` — Tính tạm tính theo số lượng khung 30 phút đã chọn.
 
@@ -257,13 +262,14 @@ classDiagram
   - `id: UUID`, `bookingCode: String` — Mã đơn hiển thị cho người dùng.
   - `userId: UUID` — Người chơi đặt đơn hoặc Chủ sân tạo đơn trực tiếp.
   - `facilityId: UUID` — Một đơn chỉ thuộc đúng một cơ sở (`AC-14`).
-  - `status: BookingStatus` — `CONFIRMED`, `CANCELLED_BY_PLAYER`, `CANCELLED_BY_OWNER`.
-  - `isDirectBooking: Boolean` — Phân biệt đơn đặt trực tiếp của chủ sân (`FR-21`).
-  - `earliestStartTime: DateTime` — Thời điểm bắt đầu của khung giờ sớm nhất trong toàn bộ đơn (dùng để kiểm tra mốc 3 giờ của người chơi và mốc 24 giờ của chủ sân).
+  - `status: BookingStatus` — Lưu đúng 3 trạng thái trong DB: `CONFIRMED`, `CANCELLED_BY_PLAYER`, `CANCELLED_BY_OWNER` (`STM-03`).
+  - `isDirectBooking: Boolean` — Phân biệt đơn đặt trực tiếp (`in-person`) với đặt qua ứng dụng (`app`) (`FR-21`).
+  - `earliestStartTime: DateTime`, `latestEndTime: DateTime` — Mốc đầu sớm nhất và mốc cuối muộn nhất trong toàn bộ đơn.
   - `cancelReason: String` — Lý do hủy (nếu có).
 - **Phương thức & Trách nhiệm:**
-  - `canCancelByPlayer(now: DateTime): Boolean` — Trả `true` chỉ khi `earliestStartTime - now >= 3 giờ` (`BR-09`, `AC-26`). Đúng mốc 3 giờ vẫn cho phép hủy.
+  - `canCancelByPlayer(now: DateTime): Boolean` — Trả `true` chỉ khi `status === CONFIRMED` và `earliestStartTime - now >= 3 giờ` (`BR-09`, `AC-26`). Đúng mốc 3 giờ vẫn cho phép hủy.
   - `isAffectedUnder24Hours(now: DateTime): Boolean` — Trả `true` nếu `earliestStartTime - now < 24 giờ` để `OwnerScheduleService` từ chối thao tác đổi/chặn lịch (`BR-11`, `AC-29`).
+  - `isCompleted(now: DateTime): Boolean` — Suy diễn nhãn *"Đã hoàn thành"* khi `status === CONFIRMED && now >= latestEndTime` (đồng bộ `STM-03` và `OVW-01`, không cần lưu trạng thái `Completed` trong DB).
 
 ---
 
@@ -271,8 +277,7 @@ classDiagram
 - **Vai trò:** Khoảng thời gian chủ sân khóa không khả dụng (bảo trì, sự kiện nội bộ) trên lịch chung (`FR-20`, `FR-22`, `BR-12`).
 - **Thuộc tính chính:**
   - `id: UUID`, `facilityId: UUID`, `courtId: UUID`, `ownerId: UUID`.
-  - `startTime: DateTime`, `endTime: DateTime` — Khoảng thời gian bị khóa (căn theo bội số 30 phút).
-  - `reason: String` — Lý do khóa lịch (đồng thời đính kèm vào thông báo hủy đơn cho người chơi nếu có đơn bị ảnh hưởng).
+  - `startTime: DateTime`, `endTime: DateTime` — Khoảng thời gian bị khóa (căn theo bội số 30 phút). Lý do khóa được truyền qua `BlockInput.reason` để đưa vào thông báo In-app nếu có đơn bị hủy (`FR-30`).
 - **Phương thức & Trách nhiệm:**
   - `isAtLeast24HoursAhead(now: DateTime): Boolean` — Kiểm tra `startTime - now >= 24 giờ` (`FR-20`, `AC-31`).
   - `overlaps(slotStart: DateTime, slotEnd: DateTime): Boolean` — Xác định giao cắt với các khung giờ đang chọn hoặc đơn đặt hiện có.
@@ -284,10 +289,8 @@ classDiagram
 - **Thuộc tính chính:**
   - `id: UUID`, `userId: UUID` — Người nhận thông báo.
   - `relatedBookingId: UUID` — Mã đơn liên quan.
-  - `title: String`, `message: String` — Nội dung bắt buộc nêu rõ: lý do hủy, mã đơn, sân con và khung giờ bị ảnh hưởng (`FR-30`).
-  - `isRead: Boolean`, `createdAt: DateTime`.
-- **Phương thức & Trách nhiệm:**
-  - `markAsRead(): void` — Đánh dấu người chơi đã xem thông báo trong ứng dụng.
+  - `message: String` — Nội dung bắt buộc nêu rõ: lý do hủy, mã đơn, sân con và khung giờ bị ảnh hưởng (`FR-30`).
+  - `createdAt: DateTime` — Thời điểm tạo thông báo (không thêm `isRead` để bám sát baseline PA2 như `DM-ENT-12`).
 
 ---
 
@@ -295,7 +298,7 @@ classDiagram
 - **Trách nhiệm của `BookingService`:**
   - `createHold(...)`: Chạy trong PostgreSQL Transaction; kiểm tra toàn bộ khung giờ đều thuộc cùng 1 cơ sở, chia 30 phút liên tiếp trên từng sân (`BR-03`), cách hiện tại tối thiểu 2 khung (60 phút) (`BR-08`), và không xung đột với `Booking`, `ScheduleBlock`, hoặc `SlotHold` còn hiệu lực (`FR-13`, `FR-32`). Nếu có bất kỳ 1 khung lỗi $\rightarrow$ rollback toàn bộ, không giữ khung nào (`BR-05`).
   - `confirmBooking(userId, holdId)`: Kiểm tra quyền sở hữu `SlotHold`, kiểm tra chưa hết hạn (`now < expiresAt`), recheck lại tình trạng trống trên lịch chung, chuyển trạng thái `SlotHold -> CONFIRMED` và tạo `Booking` tự động (`FR-11`, `FR-12`).
-  - `releaseExpiredHolds(now)`: Được Worker gọi định kỳ (1–2s) để giải phóng các `SlotHold` có `expiresAt <= now`, đảm bảo hoàn tất trong $\le 5$ giây (`FR-14`, `NFR-03`).
+  - `releaseExpiredHolds(now)`: Được `Hold Expiry Worker` (`ReleaseJob`) gọi định kỳ ($\le 1\text{s}$) để giải phóng các `SlotHold` có `expiresAt <= now`, đảm bảo hoàn tất trong $\le 5$ giây (`FR-14`, `NFR-03`).
 - **Trách nhiệm của `OwnerScheduleService`:**
   - Kiểm tra quyền sở hữu cơ sở trước mọi thao tác (`NFR-04`).
   - `updateCourtPrice(ownerId, courtId, newPrice)`: Cập nhật giá thuê theo khung 30 phút cho sân con thuộc quyền quản lý (`FR-19`, `UC-10`).
@@ -307,15 +310,40 @@ classDiagram
 
 ---
 
-## 3. Bảng Truy vết Nhanh (Đối chiếu Yêu cầu PA2)
+## 3. Bảng Truy vết & Ánh xạ chéo (`CLS-MAP`)
+
+### 3.1. Truy vết yêu cầu PA2
 
 | Mã đối tượng | Lớp thiết kế | Yêu cầu / Quy tắc đáp ứng |
 |---|---|---|
 | `CLS-01` | `User`, `UserRole` | FR-01, FR-24, NFR-04, NFR-05 |
-| `CLS-02` | `Facility` | FR-03, FR-04, FR-05, FR-17, FR-18, BR-10 |
+| `CLS-02` | `Facility`, `OperatingHours` | FR-03, FR-04, FR-05, FR-17, FR-18, BR-10 |
 | `CLS-03` | `Court` | FR-06, FR-07, FR-17, FR-19 |
 | `CLS-04` | `SlotHold`, `HoldSlotItem`, `HoldStatus` | FR-10, FR-11, FR-13, FR-14, FR-25, BR-01, BR-02, NFR-03 |
-| `CLS-05` | `Booking`, `BookingItem`, `BookingStatus` | FR-02, FR-09, FR-12, FR-16, FR-21, FR-28, BR-03, BR-09 |
+| `CLS-05` | `Booking`, `BookingItem`, `BookingStatus` | FR-02, FR-09, FR-12, FR-15, FR-16, FR-21, FR-28, BR-03, BR-09 |
 | `CLS-06` | `ScheduleBlock` | FR-20, FR-22, BR-11, BR-12, BR-13 |
 | `CLS-07` | `Notification` | FR-30, NFR-09, BR-16 |
 | `CLS-08` | `BookingService`, `OwnerScheduleService` | FR-13, FR-21, FR-27, FR-29, FR-32, NFR-02, BR-05, BR-08 |
+
+### 3.2. Ánh xạ đồng bộ với Domain Model (`3.3.1`) và Sequence (`SEQ-OPS` — `3.3.3`)
+
+| Khái niệm / Operation của Trí (`3.3.1`, `3.3.3`) | Lớp / Phương thức tương ứng trong `3.3.2` |
+|---|---|
+| `Hold`, `HoldItem`, `BlockedPeriod` (`DM-ENT`) | `SlotHold`, `HoldSlotItem`, `ScheduleBlock` (`CLS-04`, `CLS-06`) |
+| `TimeSlot.derivedStatus` (`DM-ENT-07`, `STM-02`) | Giá trị truy vấn tổng hợp tại `ScheduleRepository` từ `OperatingHours`, `ScheduleBlock`, `BookingItem` và `HoldSlotItem` |
+| `HoldService` (`SEQ-OPS`) | Nhóm phương thức `createHold`, `releaseHold`, `releaseExpiredHolds` trong `BookingService` (`CLS-08`) |
+| `ScheduleService` (`SEQ-OPS`) | `validateConsecutive30MinSlots` / `validateLeadTime` trong `BookingService` và `assertNoActiveHoldConflict` / `assertAllAffectedBookingsOver24h` trong `OwnerScheduleService` |
+| `BookingService` (`SEQ-OPS`) | `confirmBooking`, `cancelBookingByPlayer` trong `BookingService`; `OwnerScheduleService` điều phối hủy hàng loạt khi đổi lịch |
+| `ReleaseJob` (`SEQ-OPS`) | `Hold Expiry Worker` (`3.1.1`) gọi `BookingService.releaseExpiredHolds(now)` |
+
+---
+
+## 4. Thông tin gửi kèm Review (Theo Working Agreement Mục 5.3)
+
+- **Danh sách sản phẩm:** `docs/design/classes/class-design.md` (Mã đối tượng: `CLS-DIAG`, `CLS-01`..`CLS-08`, `CLS-MAP`).
+- **Kết quả tự kiểm tra:**
+  - [x] Khớp thuật ngữ và phạm vi baseline với `DM-01` (bỏ `isRead`, mỗi `Facility` 1 `sportType`, có `OperatingHours`, suy diễn `isCompleted`).
+  - [x] Đầy đủ đặc tả 8 lớp quan trọng kèm thuộc tính, kiểu dữ liệu, phương thức và ánh xạ sang `SEQ-OPS` (`3.3.3`).
+- **Điểm cần người kiểm tra xác nhận:**
+  - `@KhoiVuong2210`: xác nhận kiểu dữ liệu, tập Enum (`HoldStatus`, `BookingStatus`) và chữ ký thao tác khớp ERD/API (`3.1.2`, `3.1.4`).
+  - `@nmt1206`: xác nhận bảng ánh xạ `CLS-MAP` giữa `DM-01` / `SEQ-OPS` và lớp phần mềm `CLS-01`..`CLS-08`.
