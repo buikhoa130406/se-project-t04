@@ -147,9 +147,9 @@ classDiagram
         -BookingRepository bookingRepo
         -HoldRepository holdRepo
         -ScheduleRepository scheduleRepo
-        +createHold(userId: UUID, facilityId: UUID, selections: CourtSlotSelection[]) SlotHold
-        +confirmBooking(userId: UUID, holdId: UUID) Booking
-        +releaseHold(userId: UUID, holdId: UUID) void
+        +createHold(userId: UUID, actorRole: UserRole, facilityId: UUID, selections: CourtSlotSelection[], isDirect: Boolean) SlotHold
+        +confirmBooking(userId: UUID, holdId: UUID, isDirect: Boolean) Booking
+        +releaseHold(userId: UUID, holdId: UUID) HoldStatus
         +releaseExpiredHolds(now: DateTime) Integer
         +cancelBookingByPlayer(userId: UUID, bookingId: UUID, reason: String) Booking
         -validateConsecutive30MinSlots(selections: CourtSlotSelection[]) Boolean
@@ -164,6 +164,8 @@ classDiagram
         -BookingService bookingService
         -NotificationService notificationService
         +updateCourtPrice(ownerId: UUID, courtId: UUID, newPrice: Decimal) Court
+        +previewScheduleChange(ownerId: UUID, change: ScheduleChangeInput, now: DateTime) ChangePreviewResult
+        +applyScheduleChange(ownerId: UUID, change: ScheduleChangeInput, expectedBookingIds: UUID[], now: DateTime) ScheduleChangeResult
         +createScheduleBlock(ownerId: UUID, dto: BlockInput) ScheduleBlock
         +updateOperatingHours(ownerId: UUID, facilityId: UUID, hours: OperatingHours[]) Facility
         +deleteCourt(ownerId: UUID, courtId: UUID) void
@@ -195,7 +197,7 @@ classDiagram
     OwnerScheduleService ..> Notification : creates on owner cancel
 ```
 
-> **Ghi chú kiểu dữ liệu phụ trợ:** `CourtSlotSelection` (`courtId`, `slotStart[]`) và `BlockInput` (`courtId`, `startTime`, `endTime`, `reason`) là các DTO đầu vào tại tầng Controller/Service. Các `*Repository` là interface truy cập dữ liệu ở tầng Repository (`3.1.1`). `NotificationService` và `AuthService` thuộc các module tương ứng đã nêu ở `C4-CMP` (`3.1.1`).
+> **Ghi chú kiểu dữ liệu phụ trợ:** `CourtSlotSelection` (`courtId`, `slotStart[]`), `BlockInput` (`courtId`, `startTime`, `endTime`, `reason`) và `ScheduleChangeInput` / `ChangePreviewResult` / `ScheduleChangeResult` (gói thay đổi 2 bước và danh sách đơn bị ảnh hưởng) là các DTO đầu vào/đầu ra tại tầng Controller/Service. Các `*Repository` là interface truy cập dữ liệu ở tầng Repository (`3.1.1`). `NotificationService` và `AuthService` thuộc các module tương ứng đã nêu ở `C4-CMP` (`3.1.1`).
 
 ---
 
@@ -237,7 +239,7 @@ classDiagram
   - `facilityId: UUID` — Cơ sở chứa sân (`FK -> Facility.id`).
   - `courtCode: String` — Số/mã định danh hiển thị (ví dụ: `S1`, `Sân 2`).
   - `pricePerSlot30m: Decimal` — Đơn giá theo mỗi khung 30 phút (`FR-07`, `FR-19`).
-  - `isActive: Boolean` — Trạng thái hoạt động (phục vụ ẩn/xóa mềm sân con khi không còn sử dụng mà vẫn giữ lịch sử đơn cũ).
+  - `isActive: Boolean` — Trạng thái hoạt động (tương ứng `Court.status` đang hoạt động / đã xóa trong `DM-ENT-03`, phục vụ xóa mềm sân con để giữ lịch sử đơn cũ).
 - **Phương thức & Trách nhiệm:**
   - `calculatePrice(slotCount: Integer): Decimal` — Tính tạm tính theo số lượng khung 30 phút đã chọn.
 
@@ -296,17 +298,23 @@ classDiagram
 
 ### 2.8. [`CLS-08`] Lớp `BookingService` và `OwnerScheduleService` (Lớp Điều phối Nghiệp vụ)
 - **Trách nhiệm của `BookingService`:**
-  - `createHold(...)`: Chạy trong PostgreSQL Transaction; kiểm tra toàn bộ khung giờ đều thuộc cùng 1 cơ sở, chia 30 phút liên tiếp trên từng sân (`BR-03`), cách hiện tại tối thiểu 2 khung (60 phút) (`BR-08`), và không xung đột với `Booking`, `ScheduleBlock`, hoặc `SlotHold` còn hiệu lực (`FR-13`, `FR-32`). Nếu có bất kỳ 1 khung lỗi $\rightarrow$ rollback toàn bộ, không giữ khung nào (`BR-05`).
-  - `confirmBooking(userId, holdId)`: Kiểm tra quyền sở hữu `SlotHold`, kiểm tra chưa hết hạn (`now < expiresAt`), recheck lại tình trạng trống trên lịch chung, chuyển trạng thái `SlotHold -> CONFIRMED` và tạo `Booking` tự động (`FR-11`, `FR-12`).
-  - `releaseExpiredHolds(now)`: Được `Hold Expiry Worker` (`ReleaseJob`) gọi định kỳ ($\le 1\text{s}$) để giải phóng các `SlotHold` có `expiresAt <= now`, đảm bảo hoàn tất trong $\le 5$ giây (`FR-14`, `NFR-03`).
+  - `createHold(userId, actorRole, facilityId, selections, isDirect)`: Chạy trong PostgreSQL Transaction; kiểm tra toàn bộ khung giờ thuộc cùng 1 cơ sở, chia 30 phút liên tiếp trên từng sân (`BR-03`), nằm trong giờ mở cửa (`FR-32`), không xung đột lịch chung (`FR-13`, `BR-13`) và gọi `validateLeadTime(earliestSlot, isDirect, now)`:
+    - Nếu `isDirect === false` (**người chơi đặt qua ứng dụng**): bắt buộc `earliestSlot - now >= 60 phút` (ít nhất 2 khung, `FR-27`, `BR-08`).
+    - Nếu `isDirect === true` (**chủ sân đặt tại quầy** — chỉ hợp lệ khi `actorRole === UserRole.OWNER` và được `OwnerScheduleService.createDirectBooking` truyền vào sau khi xác minh `facility.isOwnedBy(ownerId)`): **miễn giới hạn đặt trước 60 phút**, chỉ yêu cầu `earliestSlot > now` (chưa ở quá khứ), nhờ đó sân bắt đầu sau 30 phút vẫn đặt tại quầy được (`FR-21`, `FR-27`, `AC-25`). Nếu người dùng thường cố truyền `isDirect = true` khi không phải chủ cơ sở $\rightarrow$ từ chối (`NOT_OWNER`).
+    - Nếu có bất kỳ 1 khung lỗi $\rightarrow$ rollback toàn bộ, không giữ khung nào (`BR-05`).
+  - `confirmBooking(userId, holdId, isDirect)`: Kiểm tra quyền sở hữu `SlotHold`, kiểm tra chưa hết hạn (`now < expiresAt`), recheck lại tình trạng trống trên lịch chung, chuyển trạng thái `SlotHold -> CONFIRMED` và tạo `Booking` tự động (`isDirectBooking = isDirect`, `FR-11`, `FR-12`).
+  - `releaseHold(userId, holdId)`: Kiểm tra quyền sở hữu `SlotHold` và giải phóng khung giờ chuyển `HoldStatus -> RELEASED` trong Transaction; nếu ghi DB lỗi trả về `ReleaseFailed` để UI không tự coi như đã nhả (`FR-14`).
+  - `releaseExpiredHolds(now)`: Được `Hold Expiry Worker` (`ReleaseJob`) gọi định kỳ theo tham số thiết kế $\le 1\text{s}$ để chuyển các `SlotHold` có `expiresAt <= now` qua `EXPIRED -> RELEASED`; nếu lỗi ghi DB giữ nguyên `EXPIRED` và thử lại ở chu kỳ sau nhằm hướng tới mục tiêu `NFR-03` ($\le 5\text{s}$).
 - **Trách nhiệm của `OwnerScheduleService`:**
-  - Kiểm tra quyền sở hữu cơ sở trước mọi thao tác (`NFR-04`).
+  - Kiểm tra quyền sở hữu cơ sở (`facility.isOwnedBy(ownerId)`) trước mọi thao tác (`FR-03`, `NFR-04`).
   - `updateCourtPrice(ownerId, courtId, newPrice)`: Cập nhật giá thuê theo khung 30 phút cho sân con thuộc quyền quản lý (`FR-19`, `UC-10`).
-  - Với `createScheduleBlock`, `updateOperatingHours`, `deleteCourt`:
+  - `previewScheduleChange(...)` & `applyScheduleChange(...)` (luồng 2 bước dùng chung cho `createScheduleBlock`, `updateOperatingHours`, `deleteCourt` thông qua `ScheduleChangeInput` gồm loại thay đổi `BLOCK | OPERATING_HOURS | DELETE_COURT`):
     1. Nếu có `SlotHold` đang `ACTIVE` bị ảnh hưởng $\rightarrow$ từ chối và yêu cầu chủ sân chờ lượt giữ kết thúc rồi thử lại (`FR-29`, `AC-30`).
     2. Tìm toàn bộ `Booking` bị ảnh hưởng; nếu bất kỳ đơn nào có `isAffectedUnder24Hours(now) === true` $\rightarrow$ từ chối toàn bộ thao tác (`FR-29`, `AC-29`).
-    3. Nếu tất cả đều $\ge 24$ giờ và chủ sân xác nhận $\rightarrow$ hủy toàn bộ đơn bị ảnh hưởng trong cùng Transaction, cập nhật lịch chung và tạo `Notification` In-app cho từng người chơi bị ảnh hưởng (`FR-30`).
-  - `createDirectBooking(...)`: Tái sử dụng cơ chế hold/confirm nguyên tử của `BookingService` trên Lịch chung, được miễn giới hạn đặt trước 2 khung (`FR-21`, `BR-08`), nhưng tuyệt đối không ghi đè lên `SlotHold` đang giữ hoặc `Booking` đã đặt (`BR-13`).
+    3. Nếu tất cả đều $\ge 24$ giờ $\rightarrow$ trả danh sách đơn bị ảnh hưởng ở bước xem trước. Khi chủ sân xác nhận và `applyScheduleChange` kiểm tra lại trong Transaction, nếu phát sinh đơn mới hợp lệ chưa có trong `expectedBookingIds` thì trả lại danh sách mới để chủ sân xác nhận lại; nếu danh sách khớp $\rightarrow$ hủy toàn bộ đơn bị ảnh hưởng, cập nhật lịch chung và tạo `Notification` In-app (`FR-30`).
+  - `createDirectBooking(ownerId, facilityId, selections)`:
+    1. Kiểm tra `facility.isOwnedBy(ownerId)` và vai trò `OWNER` tại cơ sở đó (`FR-03`, `NFR-04`).
+    2. Xác định ngữ cảnh đặt tại quầy (`isDirect = true`) và gọi `bookingService.createHold(ownerId, UserRole.OWNER, facilityId, selections, true)` $\rightarrow$ `bookingService.confirmBooking(ownerId, hold.id, true)`. Cách này dùng chung hoàn toàn Lịch chung và Transaction chống trùng, chỉ miễn mốc 60 phút và tuyệt đối không ghi đè lên `SlotHold` đang giữ hoặc `Booking` đã đặt (`FR-21`, `BR-08`, `BR-13`).
 
 ---
 
@@ -325,16 +333,27 @@ classDiagram
 | `CLS-07` | `Notification` | FR-30, NFR-09, BR-16 |
 | `CLS-08` | `BookingService`, `OwnerScheduleService` | FR-13, FR-21, FR-27, FR-29, FR-32, NFR-02, BR-05, BR-08 |
 
-### 3.2. Ánh xạ đồng bộ với Domain Model (`3.3.1`) và Sequence (`SEQ-OPS` — `3.3.3`)
+### 3.2. Ánh xạ & Hợp đồng chữ ký đồng bộ với Domain Model (`3.3.1`) và Sequence (`SEQ-OPS` — `3.3.3`)
 
 | Khái niệm / Operation của Trí (`3.3.1`, `3.3.3`) | Lớp / Phương thức tương ứng trong `3.3.2` |
 |---|---|
-| `Hold`, `HoldItem`, `BlockedPeriod` (`DM-ENT`) | `SlotHold`, `HoldSlotItem`, `ScheduleBlock` (`CLS-04`, `CLS-06`) |
-| `TimeSlot.derivedStatus` (`DM-ENT-07`, `STM-02`) | Giá trị truy vấn tổng hợp tại `ScheduleRepository` từ `OperatingHours`, `ScheduleBlock`, `BookingItem` và `HoldSlotItem` |
-| `HoldService` (`SEQ-OPS`) | Nhóm phương thức `createHold`, `releaseHold`, `releaseExpiredHolds` trong `BookingService` (`CLS-08`) |
-| `ScheduleService` (`SEQ-OPS`) | `validateConsecutive30MinSlots` / `validateLeadTime` trong `BookingService` và `assertNoActiveHoldConflict` / `assertAllAffectedBookingsOver24h` trong `OwnerScheduleService` |
+| `Hold`, `HoldItem`, `BlockedPeriod`, `Court.status` (`DM-ENT`) | `SlotHold`, `HoldSlotItem`, `ScheduleBlock`, `Court.isActive` (`CLS-03`, `CLS-04`, `CLS-06`) |
+| `TimeSlot.derivedStatus` (`DM-ENT-07`, `STM-02`) | Giá trị truy vấn tổng hợp tại `ScheduleRepository` từ `OperatingHours`, `ScheduleBlock`, `BookingItem`, `HoldSlotItem` và `Court.isActive` |
+| `AuthService` (`SEQ-OPS`) | Xác thực phiên & quyền sở hữu tại `Auth & RBAC Middleware` (`3.1.1`), `User.verifyPassword` (`CLS-01`) và `Facility.isOwnedBy` (`CLS-02`) |
+| `HoldService` (`SEQ-OPS`) | Nhóm phương thức giữ/nhả trong `BookingService` (`createHold`, `releaseHold`, `releaseExpiredHolds`) |
+| `ScheduleService` (`SEQ-OPS`) | Hàm kiểm tra lựa chọn trong `BookingService` và luồng 2 bước 24h (`previewScheduleChange`, `applyScheduleChange`, `assertNoActiveHoldConflict`, `assertAllAffectedBookingsOver24h`) trong `OwnerScheduleService` |
 | `BookingService` (`SEQ-OPS`) | `confirmBooking`, `cancelBookingByPlayer` trong `BookingService`; `OwnerScheduleService` điều phối hủy hàng loạt khi đổi lịch |
+| `NotificationService` (`SEQ-OPS`) | `In-App Notification Module` (`3.1.1`) được `OwnerScheduleService` gọi để tạo bản ghi `Notification` (`CLS-07`) trong Transaction |
 | `ReleaseJob` (`SEQ-OPS`) | `Hold Expiry Worker` (`3.1.1`) gọi `BookingService.releaseExpiredHolds(now)` |
+
+**Đề xuất Hợp đồng Chữ ký & Kết quả lỗi thống nhất giữa `class-design.md` (`3.3.2`) và `sequence-diagrams.md` (`3.3.3`):**
+
+| Luồng | Chữ ký thống nhất đề xuất | Đầu ra thành công | Kết quả lỗi nghiệp vụ thống nhất |
+|---|---|---|---|
+| **Giữ chỗ (`UC-05`, `UC-13`)** | `createHold(userId, actorRole, facilityId, selections, isDirect)` | `SlotHold` (`ACTIVE`, `expiresAt`) | `SelectionInvalid(code: NOT_SINGLE_FACILITY \| INVALID_SEQUENCE \| OUTSIDE_HOURS \| TOO_LATE_60M \| SLOT_CONFLICT, conflictSlots[])` hoặc `NotOwner` nếu `isDirect=true` không hợp lệ |
+| **Xác nhận (`UC-06`, `UC-13`)** | `confirmBooking(userId, holdId, isDirect)` | `Booking` (`CONFIRMED`, `isDirectBooking`) | `ConfirmRejected(code: HOLD_NOT_FOUND \| NOT_OWNER \| HOLD_EXPIRED \| SLOTS_INVALID)` |
+| **Nhả giữ chỗ (`UC-06`)** | `releaseHold(userId, holdId)` / `releaseExpiredHolds(now)` | `HoldStatus.RELEASED` | `ReleaseFailed(code: HOLD_NOT_FOUND \| NOT_OWNER \| RELEASE_ERROR)` (nếu nền lỗi: giữ `EXPIRED`, thử lại chu kỳ sau) |
+| **Hủy đơn (`UC-08`)** | `cancelBookingByPlayer(userId, bookingId, reason)` | `Booking` (`CANCELLED_BY_PLAYER`) | `CancelNotAllowed(code: BOOKING_NOT_FOUND \| NOT_OWNER \| INVALID_STATE \| UNDER_3_HOURS)` |
 
 ---
 
@@ -342,8 +361,9 @@ classDiagram
 
 - **Danh sách sản phẩm:** `docs/design/classes/class-design.md` (Mã đối tượng: `CLS-DIAG`, `CLS-01`..`CLS-08`, `CLS-MAP`).
 - **Kết quả tự kiểm tra:**
-  - [x] Khớp thuật ngữ và phạm vi baseline với `DM-01` (bỏ `isRead`, mỗi `Facility` 1 `sportType`, có `OperatingHours`, suy diễn `isCompleted`).
-  - [x] Đầy đủ đặc tả 8 lớp quan trọng kèm thuộc tính, kiểu dữ liệu, phương thức và ánh xạ sang `SEQ-OPS` (`3.3.3`).
+  - [x] Khớp thuật ngữ và phạm vi baseline với `DM-01` (bỏ `isRead`, mỗi `Facility` 1 `sportType`, có `OperatingHours`, ánh xạ `Court.status`, suy diễn `isCompleted`).
+  - [x] Làm rõ cách `createDirectBooking` truyền `isDirect = true` sau khi kiểm tra quyền sở hữu để miễn mốc 60 phút cho đặt tại quầy (`AC-25`).
+  - [x] Đưa bảng hợp đồng chữ ký và mã lỗi cho đủ 4 luồng (giữ, xác nhận, nhả, hủy) để thống nhất cùng `@nmt1206`.
 - **Điểm cần người kiểm tra xác nhận:**
-  - `@KhoiVuong2210`: xác nhận kiểu dữ liệu, tập Enum (`HoldStatus`, `BookingStatus`) và chữ ký thao tác khớp ERD/API (`3.1.2`, `3.1.4`).
-  - `@nmt1206`: xác nhận bảng ánh xạ `CLS-MAP` giữa `DM-01` / `SEQ-OPS` và lớp phần mềm `CLS-01`..`CLS-08`.
+  - `@KhoiVuong2210`: xác nhận kiểu dữ liệu, tập Enum (`HoldStatus`, `BookingStatus`) và các mã lỗi trả về khớp đặc tả API/ERD (`3.1.2`, `3.1.4`).
+  - `@nmt1206`: xác nhận thống nhất bộ chữ ký tham số (`userId, actorRole, facilityId, selections, isDirect`) và bảng mã lỗi giữa `3.3.2` và `SEQ-OPS` (`3.3.3`).
