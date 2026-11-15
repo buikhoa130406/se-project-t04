@@ -2,7 +2,7 @@
 
 - **Mã đối tượng truy vết:** `PRI-01`..`PRI-05` (Nguyên tắc thiết kế), `PAT-01`..`PAT-05` (Mẫu thiết kế), `PAT-MAP` (Bảng tổng hợp & Loại trừ phạm vi)
 - **Người thực hiện:** Lý Sĩ Vĩ (`@Lysivi2005`)
-- **Người kiểm tra:** Khôi (`@KhoiVuong2210` — khả năng hiện thực), Khoa (`@buikhoa130406` — lập luận và bằng chứng)
+- **Người kiểm tra:** Trí (`@nmt1206` — đầu mối dữ liệu `#10`), Khoa (`@buikhoa130406` — lập luận, bằng chứng `#7` & cập nhật `ADR-002`)
 - **Tài liệu liên quan:**
   - Tổng quan & Mục tiêu kiến trúc (`3.0.1`): `docs/design/design-overview.md` (`OVW-01`, `ASR-G1`..`ASR-G9`)
   - Kiến trúc hệ thống (`3.1.1`): `docs/design/architecture/architecture-design.md` (`ARC-01`, `C4-*`)
@@ -86,7 +86,7 @@
 ### 2.4. [`PAT-04`] Atomic Transaction & Concurrency Control *(Locking / Unique Constraint đang chờ `#10` & `ADR-002`)*
 - **Vấn đề cần giải quyết:** Ngăn chặn điều kiện tranh chấp (*race condition*) khi nhiều người cùng bấm *Tiến hành đặt sân* cho cùng một khung giờ (`FR-13`, `NFR-02`), đảm bảo quy tắc *All-or-Nothing* (`BR-05`, `ADR-002`) và đảm bảo việc chủ sân hủy đơn + tạo thông báo In-app xảy ra đồng bộ (`FR-29`, `FR-30`).
 - **Phần đã thống nhất & Bằng chứng (`ADR-002`, `3.1.1`, `3.3.2`, `3.3.3`):** Toàn bộ thao tác kiểm tra xung đột và ghi dữ liệu của `createHold`, `confirmBooking`, `applyScheduleChange` bắt buộc thực thi trọn vẹn trong **1 PostgreSQL ACID Transaction (*All-or-Nothing*)** tại tầng Repository (`CLS-08`, `SEQ-01`, `SEQ-02`, `SEQ-04`). Nếu bất kỳ khung giờ nào lỗi hoặc có xung đột, toàn bộ giao dịch được rollback và giữ 0 khung.
-- **Phần đang chờ xác nhận chi tiết (`Pending #10 / ADR-002`):** Cơ chế chống đặt trùng cụ thể ở tầng cơ sở dữ liệu — lựa chọn giữa **khóa bi quan theo dòng (`SELECT ... FOR UPDATE`)** hoặc **ràng buộc duy nhất (`UNIQUE / Exclusion Constraint`) theo `(court_id, slot_start)`** — hiện đang chờ Khôi (`@KhoiVuong2210`) chốt phương án cuối trong thiết kế dữ liệu `#10` và cập nhật trạng thái `ADR-002`. Sau khi `#10` chốt, tài liệu sẽ dẫn chiếu trực tiếp đến tên ràng buộc/thao tác cụ thể trong `docs/design/data/`.
+- **Phần đang chờ xác nhận chi tiết (`Pending #10 / ADR-002`):** Cơ chế chống đặt trùng cụ thể ở tầng cơ sở dữ liệu — lựa chọn giữa **khóa bi quan theo dòng (`SELECT ... FOR UPDATE`)** hoặc **ràng buộc duy nhất (`UNIQUE / Exclusion Constraint`) theo `(court_id, slot_start)`** — hiện đang chờ **Trí** (`@nmt1206`) chốt phương án cuối trong thiết kế dữ liệu `#10`, sau đó **Khoa** (`@buikhoa130406`) sẽ cập nhật trạng thái `ADR-002` (và phụ trách phần thử kết nối `#7`). Sau khi `#10` chốt, tài liệu sẽ dẫn chiếu trực tiếp đến tên ràng buộc/thao tác cụ thể trong `docs/design/data/`.
 - **Đánh đổi (Trade-off):** Dùng giao dịch ACID trực tiếp tại PostgreSQL đánh đổi một phần nhỏ thông lượng ghi đồng thời nhưng ưu tiên cao nhất tính đúng đắn **0 đơn trùng** (`NFR-02`) ở quy mô 50 người dùng đồng thời (`NFR-06`).
 
 ---
@@ -94,7 +94,7 @@
 ### 2.5. [`PAT-05`] Hybrid Expiry Pattern (Lazy Check + Background Polling Worker)
 - **Vấn đề cần giải quyết:** Lượt giữ chỗ chỉ kéo dài tối đa 5 phút, **không tự gia hạn khi tải lại trang (F5)** (`FR-25`), phải từ chối xác nhận ngay tại mốc hết hạn và hướng tới hoàn tất nhả chỗ trong **mục tiêu tối đa 5 giây** (`FR-14`, `FR-26`, `NFR-03`, `ASR-G2`).
 - **Cách áp dụng & Bằng chứng:**
-  - **Lưu mốc cố định & Lazy Check:** `SlotHold` lưu `expiresAt = createdAt + 5 phút` trên DB (`CLS-04`). Khi F5, Frontend lấy lại `remainingSeconds(now)` từ API (`UI-07`). Khi người chơi bấm *Xác nhận*, `SlotHold.isExpired(now)` kiểm tra tức thì `now >= expiresAt` để từ chối xác nhận ngay tại giây hết hạn mà không phụ thuộc worker đã chạy kịp hay chưa (`STM-01`).
+  - **Lưu mốc cố định & Lazy Check:** `SlotHold` lưu `expiresAt = createdAt + 5 phút` trên DB (`CLS-04`). Khi F5, Frontend gọi API (`getActiveHold`) nhận `expiresAt` và `serverNow` (đồng bộ hợp đồng với `UI-07` và API `#12`) để tính và đếm ngược đúng thời gian còn lại. Khi người chơi bấm *Xác nhận*, `SlotHold.isExpired(now)` kiểm tra tức thì `now >= expiresAt` để từ chối xác nhận ngay tại giây hết hạn mà không phụ thuộc worker đã chạy kịp hay chưa (`STM-01`).
   - **Background Polling Worker (`ReleaseJob`):** `Hold Expiry Worker` (`3.1.1` `C4-CNT`/`C4-CMP`) gọi `BookingService.releaseExpiredHolds(now)` theo tham số thiết kế chu kỳ $\le 1$ giây để chuyển các `SlotHold` quá hạn sang `RELEASED` (nếu lỗi giữ nguyên `EXPIRED` và thử lại ở chu kỳ sau, `SEQ-02B`).
 - **Mục tiêu `NFR-03` & Cách đo kiểm chứng:** Mốc **$\le 5$ giây** là **mục tiêu hiệu năng của `NFR-03` cần đo kiểm**, được xác định từ thời điểm `expiresAt` đến khi transaction giải phóng trên PostgreSQL hoàn tất ghi `RELEASED` và truy vấn lịch chung mở lại slot về trạng thái `AVAILABLE` (bao gồm cả thời gian trễ quét + xử lý + ghi DB). Kết quả thử nghiệm kết nối **`#7` (`2.3.1`)** chỉ làm bằng chứng cho phạm vi kết nối/kịch bản mà bài thử đó thực sự đo được, không tự suy rộng sang `NFR-03` nếu chưa chạy benchmark hết hạn/tranh chấp riêng.
 - **Lý do chọn & Đánh đổi (Trade-off):** Tránh phải dựng thêm Redis TTL hay hệ thống hàng đợi tin nhắn (RabbitMQ/BullMQ) nằm ngoài stack chuẩn PA2 (`CON-01`), giữ hạ tầng gọn trên Cloud Linux và dễ kiểm thử.
@@ -138,5 +138,5 @@
   - [x] Mọi nguyên tắc và pattern đều có bằng chứng dẫn chiếu trực tiếp đến `3.1.1`, `3.3.2`, `3.2.1` và các quyết định của nhóm (`OVW-01`, `ADR-001`..`003`, `STM-01`..`03`, `SEQ-01`..`05`).
   - [x] Có phân tích Trade-off và phần loại trừ phạm vi theo baseline PA2.
 - **Điểm cần người kiểm tra xác nhận:**
-  - `@KhoiVuong2210`: xác nhận tính khả thi triển khai của `PAT-04` (ACID/Lock) và `PAT-05` (`Hold Expiry Worker` + lazy check) khi thực nghiệm/viết đặc tả dữ liệu (`3.1.2`).
-  - `@buikhoa130406`: xác nhận lập luận, bằng chứng và mã truy vết `PRI-*`, `PAT-*` đủ căn cứ để chốt hồ sơ PA3 (`3.2.3`, `3.2.4`).
+  - `@nmt1206` (Trí — đầu mối dữ liệu `#10`): xác nhận phương án chống đặt trùng chi tiết (khóa dòng hoặc ràng buộc duy nhất) trong `#10` để hoàn tất `PAT-04`.
+  - `@buikhoa130406` (Khoa): cập nhật `ADR-002` sau khi cơ chế ở `#10` được thống nhất, đối chiếu phạm vi thử kết nối `#7`, và xác nhận lập luận/bằng chứng `PRI-*`, `PAT-*` đủ căn cứ chốt hồ sơ PA3 (`3.2.3`, `3.2.4`).
