@@ -97,17 +97,17 @@ flowchart TD
 ### 3.3. `UI-07`: Giữ chỗ tạm thời 5 phút & Xác nhận đặt sân (UC-05, UC-06)
 - **Ảnh minh họa:** `../../requirements/UI_Picture/02_NguoiChoi_DatSan/Trang_UC-05_UC-06_GiuCho5Phut_HoaDon.png`
 - **Trạng thái giao diện đồng bộ `STM-01` (`HoldStatus`):**
-  - `ACTIVE`: Hiển thị đồng hồ đếm ngược (tính từ `expiresAt` của server), bật nút *Xác nhận đặt sân*.
-  - `EXPIRED` (hết giờ nhưng chưa nhả xong): Khóa ngay nút *Xác nhận đặt sân*, hiển thị trạng thái *"Đang giải phóng chỗ..."*; nếu giải phóng thất bại $\rightarrow$ báo lỗi cụ thể và **không cho tiếp tục như thể đã nhả xong** (`FR-14`, `AC-20`).
-  - `RELEASED`: Hoàn tất nhả slot (trong $\le 5$ giây khi hết hạn hoặc ngay khi người chơi bấm hủy), cho phép quay lại `UI-06` để chọn giờ mới.
+  - `ACTIVE`: Hiển thị đồng hồ đếm ngược (tính từ `expiresAt` của server), bật nút *Xác nhận đặt sân* và *Hủy / Chọn lại giờ*.
+  - `EXPIRED` (hết giờ nhưng chưa nhả xong): Khóa ngay nút *Xác nhận đặt sân*, hiển thị thông báo hết thời gian giữ và trạng thái *"Đang giải phóng chỗ..."*; chỉ cho chọn lại sau khi nhả xong; nếu giải phóng thất bại $\rightarrow$ báo lỗi thực tế và **không cho tiếp tục như thể đã nhả xong** (`FR-14`, `AC-20`).
+  - `RELEASED`: Máy chủ đã xác nhận hoàn tất nhả slot (khi hết hạn hoặc khi người chơi bấm hủy), cho phép quay lại `UI-06` để chọn giờ mới.
 - **Control, Event & Validation:**
 
 | Control | Loại | Event | Validation & Phản hồi API / Trạng thái |
 |---|---|---|---|
-| Đồng hồ đếm ngược 05:00 | Timer Badge | `onTick` (1s) | Hiển thị thời gian giữ còn lại dựa trên `expiresAt` của server. **Tải lại trang (F5) giữ nguyên thời gian còn lại**, không reset 5 phút (FR-25). Không tự gia hạn (FR-31). |
+| Đồng hồ đếm ngược 05:00 | Timer Badge | `onTick` (1s) | Hiển thị thời gian giữ còn lại dựa trên `expiresAt` của server. **Bảo toàn lượt giữ khi tải lại trang (F5):** Hold được lưu cố định trên DB (không giữ bằng state tạm ở trình duyệt) và giao diện không gửi yêu cầu nhả khi reload; sau khi F5, trang tự gọi API lấy Hold đang hoạt động (`getActiveHold` trả `expiresAt`, `serverNow`) để khôi phục `UI-07` và đếm ngược tiếp đúng thời gian còn lại, không reset 5 phút (`FR-25`, `AC-22`, `SEQ-02B`). Không tự gia hạn (`FR-31`). |
 | Nút *Xác nhận đặt sân* | Primary Button | `onClick` | Gọi API kiểm tra lại (Recheck) quyền sở hữu Hold, `now < expiresAt` và tình trạng sân. Nếu hợp lệ $\rightarrow$ **tự động xác nhận đơn** (không chờ chủ sân duyệt, FR-12) và chuyển `UI-08`. Nếu hết hạn tại thời điểm bấm $\rightarrow$ từ chối ngay (`AC-35`, `AC-39`). |
-| Nút *Hủy / Chọn lại giờ* | Secondary Button | `onClick` | Gửi yêu cầu nhả Hold ngay lập tức sang `RELEASED` và quay về `UI-06` (FR-14, AC-21). |
-| Rời trang / Đóng tab | Browser Lifecycle | `beforeunload` / `pagehide` | Gửi tín hiệu `sendBeacon` cố gắng nhả Hold sớm; nếu mất kết nối không gửi được thì hết 5 phút hệ thống tự giải phóng (FR-26, AC-23). |
+| Nút *Hủy / Chọn lại giờ* | Secondary Button | `onClick` | Khóa tạm nút và hiển thị trạng thái *"Đang giải phóng chỗ..."* trong khi gửi API nhả Hold (`releaseHold`). **Chỉ chuyển về `UI-06` sau khi máy chủ xác nhận Hold đã chuyển sang `RELEASED`**. Nếu máy chủ báo lỗi (nhả thất bại), giữ người dùng lại trên màn hình và hiển thị lỗi kèm trạng thái thực tế của Hold để người dùng không thao tác như thể chỗ đã được giải phóng (`FR-14`, `AC-20`, `AC-21`). |
+| Đóng tab / Mất kết nối | Session / Expiry Fallback | `N/A` (không nhả khi reload) | **Không** gửi yêu cầu nhả Hold từ `beforeunload` / `pagehide` vì trình duyệt kích hoạt các sự kiện này cả khi F5, dễ làm mất giữ chỗ trái `FR-25`. Nếu có cơ chế phát hiện rời luồng tách biệt với F5 (như điều hướng nội bộ trong SPA), hệ thống gửi yêu cầu nhả sớm; còn khi đóng tab hoặc mất kết nối đột ngột không phân biệt được, hệ thống dựa vào **cơ chế hết hạn 5 phút** (`Hold Expiry Worker`) để tự động giải phóng sau `expiresAt` (`FR-26`, `AC-23`, `SEQ-02B`). |
 
 ---
 
