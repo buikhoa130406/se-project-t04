@@ -21,7 +21,8 @@ Năm sơ đồ tuần tự (sequence diagram) chính bao quát các use case có
 
 * **Truy vết:** UC-05, FR-01, FR-09, FR-10, FR-13, FR-23, FR-27, FR-32, BR-02..05, BR-08, BR-14, NFR-02, AC-02, AC-03, AC-12..18, AC-24, AC-37.
 
-Chọn slot chưa tạo hold; chỉ khi bấm `Proceed to booking` hệ thống mới kiểm tra và giữ chỗ. Khách chưa đăng nhập được chuyển đến đăng nhập trước và không tạo hold; sau khi đăng nhập, người dùng quay về trang chủ và chọn lại (FR-23). Với người đã đăng nhập, `ScheduleService` kiểm tra luật lựa chọn (cùng cơ sở, slot liên tiếp trên từng sân, đặt trước ít nhất 2 slot tức 60 phút). Nếu đúng luật, việc **kiểm tra xung đột và ghi hold** diễn ra trong một transaction duy nhất: nếu bất kỳ slot nào đã bị giữ, đặt hoặc khóa (kể cả do yêu cầu khác thắng cùng lúc) thì không giữ slot nào.
+Chọn slot chưa tạo hold; chỉ khi bấm `Proceed to booking` hệ thống mới kiểm tra và giữ chỗ. Khách chưa đăng nhập được chuyển đến đăng nhập trước và không tạo hold; sau khi đăng nhập, người dùng quay về trang chủ và chọn lại (FR-23). Với người đã đăng nhập, `ScheduleService` kiểm tra luật lựa chọn (cùng cơ sở, sân còn hoạt động, slot liên tiếp trên từng sân, trong giờ hoạt động, đặt trước ít nhất 2 slot tức 60 phút). Nếu đúng luật, việc **kiểm tra xung đột và ghi hold** diễn ra trong một transaction duy nhất: nếu bất kỳ slot nào đã bị giữ, đặt hoặc khóa (kể cả do yêu cầu khác thắng cùng lúc) thì không giữ slot nào.
+
 
 *Hình 4.4.1 — Sơ đồ tuần tự cho UC-05 (`SEQ-01`)*
 
@@ -46,7 +47,7 @@ sequenceDiagram
         AuthService-->>BookingController: authenticated(userId, role)
         BookingController->>HoldService: createHold(userId, role, selection)
         HoldService->>ScheduleService: validateSelection(selection, role, now)
-        Note over HoldService,ScheduleService: luật: cùng cơ sở, slot 30 phút liên tiếp trên từng sân, trong giờ hoạt động, đặt trước >= 2 slot
+        Note over HoldService,ScheduleService: luật: cùng cơ sở, sân còn hoạt động, slot 30 phút liên tiếp trên từng sân, trong giờ hoạt động, đặt trước >= 2 slot
 
         alt vi phạm luật lựa chọn
             ScheduleService-->>HoldService: invalid(reason)
@@ -75,7 +76,6 @@ sequenceDiagram
 * **Truy vết:** UC-06, FR-11, FR-12, FR-14, FR-15, FR-31, BR-01, BR-06, BR-15, NFR-02, NFR-03, AC-19, AC-35, AC-36, AC-38, AC-39.
 
 Người chơi xác nhận khi hold còn hiệu lực. Toàn bộ việc đọc hold, kiểm tra và ghi nằm trong **một transaction**: hold được khóa để đọc, kiểm tra quyền sở hữu, trạng thái `Active` và `now < expiresAt`, rồi kiểm tra lại các slot. Việc từ chối khi hết hạn dựa trên `expiresAt`, **không** chờ tác vụ nhả chạy (xem `SEQ-02B`). Nếu hợp lệ, booking được tạo ở trạng thái `Confirmed`, các slot chuyển sang `Booked` và hold đóng. Nếu xác nhận và nhả hết hạn xảy ra cùng lúc thì chỉ một bên thắng nhờ khóa trên hold.
-
 
 *Hình 4.4.2 — Sơ đồ tuần tự cho UC-06 (`SEQ-02`)*
 
@@ -128,10 +128,14 @@ sequenceDiagram
 
 Sơ đồ này thể hiện bốn tình huống của một hold đang `Active`:
 
-* **Hết hạn 5 phút:** hold chuyển `Expired` (từ chối xác nhận ngay), tác vụ nền nhả slot trong vòng 5 giây rồi hold sang `Released`. Nếu nhả lỗi, hold giữ `Expired`, tác vụ thử lại ở chu kỳ sau và giao diện báo lỗi, không cho tiếp tục như thể đã nhả (FR-14).
+* **Hết hạn 5 phút:** hold chuyển `Expired` (từ chối xác nhận ngay, giao diện hiển thị thông báo hết hạn và khóa nút xác nhận trong lúc nhả), tác vụ nền nhả slot trong vòng 5 giây rồi hold sang `Released`. Trong trạng thái `Expired`, giao diện nhận **ba kết quả khác nhau** từ `getHoldStatus` (FR-14, AC-20):
+  * `Releasing`: đang giải phóng. Giao diện vẫn hiển thị thông báo hết hạn, tạm khóa nút xác nhận, **chưa** cho chọn lại và **không** báo lỗi; tiếp tục hỏi lại trạng thái.
+  * `ReleaseFailed`: giải phóng thất bại (tác vụ nhả báo lỗi, hoặc quá 5 giây sau `expiresAt` mà hold vẫn chưa `Released`). Chỉ khi đó giao diện mới báo lỗi giải phóng và không cho tiếp tục như thể đã nhả; tác vụ nền thử lại ở chu kỳ sau.
+  * `Released`: giải phóng thành công. Chỉ lúc này giao diện mới cho chọn lại và cập nhật tình trạng sân.
 * **Người dùng hủy, quay lại hoặc đổi lựa chọn:** hold sang `Released` ngay và slot được nhả.
 * **Tải lại trang:** hold giữ nguyên `expiresAt`, giao diện đếm ngược tiếp, không đặt lại 5 phút (FR-25).
 * **Đóng tab hoặc mất kết nối:** giao diện cố gắng gửi yêu cầu nhả khi rời trang; nếu không phát hiện được thì hold hết hạn như tình huống đầu (FR-26).
+
 
 *Hình 4.4.2B — Sơ đồ tuần tự vòng đời hold (`SEQ-02B`)*
 
@@ -147,7 +151,7 @@ sequenceDiagram
     Note over Player,Database: hold đang ở trạng thái Active với expiresAt do server đặt
 
     alt hold hết hạn 5 phút
-        Note over ConfirmPage: đếm ngược về 0 theo expiresAt của server, khóa nút Confirm
+        Note over ConfirmPage: đếm ngược về 0 theo expiresAt của server, hiển thị thông báo hết hạn, khóa nút Confirm trong lúc nhả
         loop mỗi chu kỳ không quá 1 giây
             ReleaseJob->>HoldService: releaseExpiredHolds(now)
             HoldService->>Database: markExpired(holds có expiresAt <= now)
@@ -156,7 +160,7 @@ sequenceDiagram
             alt nhả thành công
                 Database-->>HoldService: ok (hold Released, slot Available)
             else nhả lỗi
-                Database-->>HoldService: error (hold giữ Expired, thử lại ở chu kỳ sau)
+                Database-->>HoldService: error (hold giữ Expired, ghi nhận nhả lỗi, thử lại ở chu kỳ sau)
             end
         end
 
@@ -164,12 +168,14 @@ sequenceDiagram
         BookingController->>HoldService: getHoldStatus(holdId, userId)
         HoldService->>Database: selectHold(holdId)
         Database-->>HoldService: holdRecord
-        HoldService-->>BookingController: status
+        HoldService-->>BookingController: status (Released, Releasing hoặc ReleaseFailed)
 
         alt status = Released
             BookingController-->>ConfirmPage: cho chọn lại, cập nhật tình trạng sân
-        else status = Expired (nhả chưa xong hoặc lỗi)
-            BookingController-->>ConfirmPage: báo lỗi nhả, không cho tiếp tục
+        else status = Releasing (Expired, đang giải phóng)
+            BookingController-->>ConfirmPage: giữ thông báo hết hạn, tạm khóa Confirm, chưa cho chọn lại, không báo lỗi, hỏi lại trạng thái
+        else status = ReleaseFailed (Expired, nhả lỗi hoặc quá 5 giây)
+            BookingController-->>ConfirmPage: báo lỗi giải phóng, không cho tiếp tục hay chọn lại, tác vụ nền thử lại, hỏi lại trạng thái
         end
 
     else người dùng hủy, quay lại hoặc đổi lựa chọn
@@ -199,7 +205,6 @@ sequenceDiagram
 * **Truy vết:** UC-08, FR-02, FR-16, FR-28, BR-09, NFR-04, AC-05, AC-26, AC-27.
 
 Người chơi chỉ được hủy toàn bộ booking của mình (không hủy lẻ từng sân), và chỉ khi slot sớm nhất bắt đầu sau ít nhất 3 giờ nữa. Hủy đúng 3 giờ trước vẫn được chấp nhận. Đọc booking, kiểm tra và ghi nằm trong một transaction.
-
 
 *Hình 4.4.3 — Sơ đồ tuần tự cho UC-08 (`SEQ-03`)*
 
@@ -243,7 +248,7 @@ sequenceDiagram
 
 * **Truy vết:** UC-11, FR-03, FR-20, FR-22, FR-29, FR-30, BR-10..13, BR-16, NFR-04, NFR-08, NFR-09, AC-07, AC-28..32.
 
-Quyền sở hữu cơ sở được kiểm tra ở cả bước xem trước lẫn bước xác nhận. Luật 24 giờ và luật chờ hold nằm ở `ScheduleService`: bước xem trước (`previewChange`) từ chối nếu bản thân khoảng khóa hoặc bất kỳ booking bị ảnh hưởng nào bắt đầu trong dưới 24 giờ, và yêu cầu chờ nếu còn hold bị ảnh hưởng. Sau khi chủ sân xác nhận, `applyChange` kiểm tra lại rồi **trong cùng một transaction** hủy toàn bộ booking bị ảnh hưởng, tạo `BlockedPeriod` và ghi thông báo; nếu kiểm tra lại thất bại thì rollback, không đổi gì. Nếu chủ sân không xác nhận thì lịch không đổi (A1).
+Quyền sở hữu cơ sở được kiểm tra ở cả bước xem trước lẫn bước xác nhận. Luật 24 giờ và luật chờ hold nằm ở `ScheduleService`: bước xem trước (`previewChange`) trả về danh sách booking bị hủy cùng phần bị ảnh hưởng của từng booking (UC-11 bước 3), từ chối nếu bản thân khoảng khóa hoặc bất kỳ booking bị ảnh hưởng nào bắt đầu trong dưới 24 giờ, và yêu cầu chờ nếu còn hold bị ảnh hưởng. Khi chủ sân xác nhận, yêu cầu mang theo **danh sách booking chủ sân đã thấy và xác nhận** (`confirmedBookings`). `applyChange` mở một transaction, kiểm tra lại hold, luật 24 giờ và **tính lại danh sách booking bị ảnh hưởng**. Nếu có hold mới hoặc booking mới vi phạm 24 giờ thì rollback và từ chối. Nếu danh sách tính lại khác danh sách đã xác nhận (ví dụ có thêm một booking mới đủ điều kiện 24 giờ) thì rollback, **không hủy booking nào** và trả danh sách mới để chủ sân xem và xác nhận lại. Chỉ khi danh sách khớp mới hủy đúng danh sách đã xác nhận và đã kiểm tra lại, tạo `BlockedPeriod` và ghi thông báo, **trong cùng một transaction**. Nếu chủ sân không xác nhận thì lịch không đổi (A1).
 
 
 *Hình 4.4.4 — Sơ đồ tuần tự cho UC-11 (`SEQ-04`)*
@@ -282,25 +287,30 @@ sequenceDiagram
             ScheduleService-->>FacilityController: HoldsPending
             FacilityController-->>CourtSchedulePage: chờ hold kết thúc rồi thử lại
         else thay đổi hợp lệ
-            ScheduleService-->>FacilityController: preview(affectedBookings)
-            FacilityController-->>CourtSchedulePage: danh sách booking sẽ bị hủy + cảnh báo
+            ScheduleService-->>FacilityController: preview(affectedBookings, affectedPortions)
+            FacilityController-->>CourtSchedulePage: danh sách booking sẽ bị hủy, phần bị ảnh hưởng và cảnh báo
 
             alt chủ sân xác nhận
                 FacilityOwner->>CourtSchedulePage: xác nhận
-                CourtSchedulePage->>FacilityController: confirmBlock(courtId, period)
+                CourtSchedulePage->>FacilityController: confirmBlock(courtId, period, confirmedBookings)
                 FacilityController->>AuthService: verifyFacilityOwner(userId, facilityId)
                 AuthService-->>FacilityController: authorized
-                FacilityController->>ScheduleService: applyChange(block(courtId, period), now)
+                FacilityController->>ScheduleService: applyChange(block(courtId, period), confirmedBookings, now)
                 ScheduleService->>Database: BEGIN transaction
-                ScheduleService->>Database: recheckHoldsAnd24hRules(courtId, period)
-                Database-->>ScheduleService: recheckResult
+                ScheduleService->>Database: recheckHoldsAndAffected(courtId, period)
+                Database-->>ScheduleService: recheckResult(holds, affectedBookingsNow)
 
-                alt kiểm tra lại phát sinh hold mới hoặc vi phạm 24 giờ
+                alt phát sinh hold mới hoặc có booking bị ảnh hưởng vi phạm 24 giờ
                     ScheduleService->>Database: ROLLBACK
-                    ScheduleService-->>FacilityController: RevalidationFailed
-                    FacilityController-->>CourtSchedulePage: báo xung đột mới phát sinh, yêu cầu thử lại
-                else kiểm tra lại hợp lệ
-                    ScheduleService->>BookingService: cancelAffected(affectedBookings, reason)
+                    ScheduleService-->>FacilityController: Rejected(HoldsPending hoặc AffectedTooSoon)
+                    FacilityController-->>CourtSchedulePage: báo lý do, chờ hold kết thúc hoặc từ chối toàn bộ, không hủy booking nào
+                else danh sách booking bị ảnh hưởng đã khác danh sách chủ sân xác nhận
+                    ScheduleService->>Database: ROLLBACK
+                    ScheduleService-->>FacilityController: ListChanged(newAffectedBookings, newAffectedPortions)
+                    FacilityController-->>CourtSchedulePage: hiển thị danh sách mới và cảnh báo, không hủy booking nào
+                    Note over FacilityOwner,CourtSchedulePage: chủ sân xem danh sách mới rồi xác nhận lại, quay về bước confirmBlock
+                else danh sách khớp và hợp lệ
+                    ScheduleService->>BookingService: cancelAffected(confirmedBookings, reason)
                     BookingService->>Database: setStatus(CancelledByOwner) + releaseSlots
                     Database-->>BookingService: ok
                     BookingService-->>ScheduleService: ok
@@ -351,7 +361,7 @@ sequenceDiagram
         AuthService-->>BookingController: authorized
         BookingController->>HoldService: createHold(userId, FacilityOwner, selection)
         HoldService->>ScheduleService: validateSelection(selection, FacilityOwner, now)
-        Note over HoldService,ScheduleService: owner được miễn giới hạn đặt trước 2 slot, các luật khác như SEQ-01
+        Note over HoldService,ScheduleService: owner được miễn giới hạn đặt trước 2 slot, các luật khác (kể cả sân còn hoạt động) như SEQ-01
 
         alt vi phạm luật lựa chọn
             ScheduleService-->>HoldService: invalid(reason)
@@ -396,8 +406,8 @@ UC-12 (đổi giờ hoạt động hoặc xóa sân) không có sơ đồ riêng
 
 | Hạng mục | Nội dung |
 | ----- | ----- |
-| **Dùng chung** | Kiểm tra quyền chủ sở hữu cơ sở (cả lúc xem trước và lúc xác nhận); xem trước các booking và hold bị ảnh hưởng; chờ hold kết thúc; từ chối toàn bộ nếu một booking bị ảnh hưởng bắt đầu trong dưới 24 giờ (đúng 24 giờ vẫn được); cảnh báo; xác nhận rồi kiểm tra lại; hủy toàn bộ booking bị ảnh hưởng và ghi thay đổi lịch cùng thông báo trong một transaction (BR-11, FR-03, FR-29, FR-30). |
-| **Khác biệt** | Tham số `change` của `previewChange`/`applyChange` là thay đổi giờ hoạt động hoặc việc xóa sân, không phải `block(courtId, period)`. Tập bị ảnh hưởng là các booking tương lai có slot nằm ngoài giờ mới (đổi giờ) hoặc mọi booking tương lai của sân (xóa sân). Không áp quy tắc "khoảng khóa phải bắt đầu sau 24 giờ" của BR-12 vì không có khoảng khóa; chỉ áp luật 24 giờ của FR-29 cho booking bị ảnh hưởng. Bước ghi cuối cập nhật giờ hoạt động hoặc xóa sân (cách lưu do 3.1.2 quyết định) thay vì tạo `BlockedPeriod`. Nếu không có booking nào bị ảnh hưởng thì không hủy gì (A1), và chủ sân có thể hủy thao tác trước khi xác nhận (A2). |
+| **Dùng chung** | Kiểm tra quyền chủ sở hữu cơ sở (cả lúc xem trước và lúc xác nhận); xem trước các booking và hold bị ảnh hưởng; chờ hold kết thúc; từ chối toàn bộ nếu một booking bị ảnh hưởng bắt đầu trong dưới 24 giờ (đúng 24 giờ vẫn được); cảnh báo; xác nhận rồi kiểm tra lại (kể cả so danh sách bị ảnh hưởng với danh sách chủ sân đã xác nhận, khác thì trả danh sách mới để xác nhận lại); hủy toàn bộ booking bị ảnh hưởng và ghi thay đổi lịch cùng thông báo trong một transaction (BR-11, FR-03, FR-29, FR-30). |
+| **Khác biệt** | Tham số `change` của `previewChange`/`applyChange` là thay đổi giờ hoạt động hoặc việc xóa sân, không phải `block(courtId, period)`. Tập bị ảnh hưởng là các booking tương lai có slot nằm ngoài giờ mới (đổi giờ) hoặc mọi booking tương lai của sân (xóa sân). Không áp quy tắc "khoảng khóa phải bắt đầu sau 24 giờ" của BR-12 vì không có khoảng khóa; chỉ áp luật 24 giờ của FR-29 cho booking bị ảnh hưởng. Bước ghi cuối cập nhật giờ hoạt động hoặc xóa sân (cách lưu do 3.1.2 quyết định) thay vì tạo `BlockedPeriod`. Màn hình xem trước nêu cả phần bị ảnh hưởng của từng booking (UC-12 bước 3). Nếu không có booking nào bị ảnh hưởng thì không hủy gì (A1), và chủ sân có thể hủy thao tác trước khi xác nhận (A2). |
 | **Operation** | Dùng lại `verifyFacilityOwner`, `previewChange`, `applyChange`, `cancelAffected` và `notify`; chỉ khác hai điểm vào ở `FacilityController` (xem trước/xác nhận thay đổi giờ hoạt động hoặc xóa sân) và thao tác ghi cuối. |
 
 ## 8. Các operation dùng trong sơ đồ tuần tự (`SEQ-OPS`)
@@ -405,10 +415,10 @@ UC-12 (đổi giờ hoạt động hoặc xóa sân) không có sơ đồ riêng
 | Lớp | Operation | Truy vết sơ đồ |
 | ----- | ----- | ----- |
 | **BookingController** | `proceedToBooking(selection)`; `confirmBooking(holdId)`; `cancelBooking(bookingId)`; `releaseHold(holdId)`; `getActiveHold()`; `getHoldStatus(holdId)` | `SEQ-01`, `SEQ-02`, `SEQ-02B`, `SEQ-03`, `SEQ-05` |
-| **FacilityController** | `previewBlock(courtId, period)`; `confirmBlock(courtId, period)` (và hai điểm vào tương ứng cho đổi giờ hoạt động, xóa sân) | `SEQ-04`, `SEQ-04B` |
+| **FacilityController** | `previewBlock(courtId, period)`; `confirmBlock(courtId, period, confirmedBookings)` (và hai điểm vào tương ứng cho đổi giờ hoạt động, xóa sân) | `SEQ-04`, `SEQ-04B` |
 | **AuthService** | `verifySession()`; `verifyFacilityOwner(userId, facilityId)` | `SEQ-01`, `SEQ-04`, `SEQ-05` |
-| **HoldService** | `createHold(userId, role, selection)`; `getHoldForUpdate(holdId)`; `releaseHold(holdId, userId)`; `getActiveHold(userId)`; `getHoldStatus(holdId, userId)`; `releaseExpiredHolds(now)` | `SEQ-01`, `SEQ-02`, `SEQ-02B`, `SEQ-05` |
-| **ScheduleService** | `validateSelection(selection, role, now)`; `recheckAvailability(items)`; `previewChange(change, now)`; `applyChange(change, now)` | `SEQ-01`, `SEQ-02`, `SEQ-04`, `SEQ-04B`, `SEQ-05` |
+| **HoldService** | `createHold(userId, role, selection)`; `getHoldForUpdate(holdId)`; `releaseHold(holdId, userId)`; `getActiveHold(userId)`; `getHoldStatus(holdId, userId)` (trả `Released`, `Releasing` hoặc `ReleaseFailed`); `releaseExpiredHolds(now)` | `SEQ-01`, `SEQ-02`, `SEQ-02B`, `SEQ-05` |
+| **ScheduleService** | `validateSelection(selection, role, now)`; `recheckAvailability(items)`; `previewChange(change, now)`; `applyChange(change, confirmedBookings, now)` | `SEQ-01`, `SEQ-02`, `SEQ-04`, `SEQ-04B`, `SEQ-05` |
 | **BookingService** | `confirmBooking(holdId, userId)`; `cancelBooking(bookingId, userId)`; `cancelAffected(bookings, reason)` | `SEQ-02`, `SEQ-03`, `SEQ-04`, `SEQ-05` |
 | **NotificationService** | `notify(players, reason, booking, slots)` | `SEQ-04`, `SEQ-04B` |
 | **ReleaseJob** (tác vụ nền) | gọi `releaseExpiredHolds(now)` theo chu kỳ không quá 1 giây | `SEQ-02B` |
@@ -438,7 +448,7 @@ UC-12 (đổi giờ hoạt động hoặc xóa sân) không có sơ đồ riêng
 
   1. `ScheduleService` kiểm tra luật lựa chọn, `HoldService` quản lý vòng đời giữ chỗ 5 phút, `BookingService` xác nhận/hủy đơn đặt; việc ghi hold, xác nhận và áp dụng thay đổi lịch đều nguyên tử.
 
-  2. Mẫu 2 bước (`previewChange` -> `applyChange` kèm kiểm tra lại trong transaction) cho UC-11 và UC-12, với `change` là tham số chung.
+  2. Mẫu 2 bước (`previewChange` -> `applyChange` kèm kiểm tra lại trong transaction) cho UC-11 và UC-12, với `change` là tham số chung. Chỉ hủy đúng danh sách đã được chủ sân xác nhận và kiểm tra lại; danh sách đổi thì trả danh sách mới để xác nhận lại.
 
   3. Từ chối xác nhận dựa vào `expiresAt` chứ không phụ thuộc tác vụ nhả; tác vụ nền chỉ nhả slot.
 
