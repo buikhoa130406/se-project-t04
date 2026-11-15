@@ -6,7 +6,7 @@
 
 * **Người chịu trách nhiệm chính:** Nguyễn Minh Trí (`@nmt1206`)
 
-* **Người kiểm tra:** Vĩ (`@Lysivi2005` — kiểm tra thao tác lớp); Khôi (`@KhoiVuong2210` — kiểm tra API/giao dịch/xung đột).
+* **Người kiểm tra:** Khoa (`@buikhoa130406` — kiểm tra luồng nghiệp vụ và thử nghiệm kết nối `#7`); Vĩ (`@Lysivi2005` — đối chiếu thao tác lớp `#31`, hợp đồng API `#12` và trạng thái giao diện `#29`).
 
 Năm sơ đồ tuần tự (sequence diagram) chính bao quát các use case có rủi ro thiết kế cao nhất: tạo hold (UC-05), xác nhận booking (UC-06), hủy booking (UC-08), khóa slot (UC-11) và nhập booking tại quầy (UC-13). Thêm một sơ đồ phụ `SEQ-02B` cho vòng đời hold (hết hạn, nhả, hủy, tải lại, đóng tab) vì đây là yêu cầu kiến trúc `ASR-G2`. UC-12 dùng chung luồng của UC-11 và được nêu ở phần so sánh `SEQ-04B`. Mỗi sơ đồ thể hiện luồng chính và các luồng thay thế do luật nghiệp vụ đòi hỏi. Mọi đường trả về đi qua đúng tầng `Database -> Service -> Controller -> Page`.
 
@@ -77,6 +77,7 @@ sequenceDiagram
 
 Người chơi xác nhận khi hold còn hiệu lực. Toàn bộ việc đọc hold, kiểm tra và ghi nằm trong **một transaction**: hold được khóa để đọc, kiểm tra quyền sở hữu, trạng thái `Active` và `now < expiresAt`, rồi kiểm tra lại các slot. Việc từ chối khi hết hạn dựa trên `expiresAt`, **không** chờ tác vụ nhả chạy (xem `SEQ-02B`). Nếu hợp lệ, booking được tạo ở trạng thái `Confirmed`, các slot chuyển sang `Booked` và hold đóng. Nếu xác nhận và nhả hết hạn xảy ra cùng lúc thì chỉ một bên thắng nhờ khóa trên hold.
 
+
 *Hình 4.4.2 — Sơ đồ tuần tự cho UC-06 (`SEQ-02`)*
 
 ```mermaid
@@ -135,7 +136,6 @@ Sơ đồ này thể hiện bốn tình huống của một hold đang `Active`:
 * **Người dùng hủy, quay lại hoặc đổi lựa chọn:** hold sang `Released` ngay và slot được nhả.
 * **Tải lại trang:** hold giữ nguyên `expiresAt`, giao diện đếm ngược tiếp, không đặt lại 5 phút (FR-25).
 * **Đóng tab hoặc mất kết nối:** giao diện cố gắng gửi yêu cầu nhả khi rời trang; nếu không phát hiện được thì hold hết hạn như tình huống đầu (FR-26).
-
 
 *Hình 4.4.2B — Sơ đồ tuần tự vòng đời hold (`SEQ-02B`)*
 
@@ -280,12 +280,12 @@ sequenceDiagram
         alt khoảng khóa bắt đầu trong dưới 24 giờ
             ScheduleService-->>FacilityController: Rejected(BlockTooSoon)
             FacilityController-->>CourtSchedulePage: từ chối thay đổi
-        else có booking bị ảnh hưởng bắt đầu trong dưới 24 giờ
+        else có booking bị ảnh hưởng với giờ bắt đầu sớm nhất dưới 24 giờ
             ScheduleService-->>FacilityController: Rejected(AffectedTooSoon)
             FacilityController-->>CourtSchedulePage: từ chối toàn bộ, không hủy booking nào
         else còn hold bị ảnh hưởng
             ScheduleService-->>FacilityController: HoldsPending
-            FacilityController-->>CourtSchedulePage: chờ hold kết thúc rồi thử lại
+            FacilityController-->>CourtSchedulePage: chờ hold kết thúc hoặc được xác nhận rồi thử lại
         else thay đổi hợp lệ
             ScheduleService-->>FacilityController: preview(affectedBookings, affectedPortions)
             FacilityController-->>CourtSchedulePage: danh sách booking sẽ bị hủy, phần bị ảnh hưởng và cảnh báo
@@ -334,7 +334,7 @@ sequenceDiagram
 
 * **Truy vết:** UC-13, FR-03, FR-10, FR-11, FR-12, FR-21, FR-22, FR-27, BR-03, BR-08, BR-10, BR-13, NFR-02..04, NFR-08, AC-07, AC-25, AC-33.
 
-Chủ sân đặt thay khách tại quầy theo đúng luồng của người chơi: chọn sân và slot, giữ chỗ, rồi xác nhận (UC-05 và UC-06). Khác biệt: hệ thống kiểm tra chủ sân có quản lý cơ sở đó, chủ sân được miễn giới hạn đặt trước 2 slot (FR-27), nhưng vẫn không được đè lên slot đang held hoặc booked (BR-13). Booking được ghi vào lịch chung với nguồn là `in-person` (không lưu thông tin khách). Hold hết hạn, nhả, tải lại và đóng tab xử lý như `SEQ-02B`.
+Chủ sân đặt thay khách tại quầy theo đúng luồng của người chơi: chọn sân và slot, giữ chỗ, rồi xác nhận (UC-05 và UC-06). Khác biệt: hệ thống kiểm tra chủ sân có quản lý cơ sở đó, chủ sân được miễn giới hạn đặt trước 2 slot (FR-27), nhưng vẫn không được đè lên slot đang held hoặc booked (BR-13). Booking được ghi vào lịch chung với nguồn là `in-person` (không lưu thông tin khách, `ASM-09`). Hold hết hạn, nhả, tải lại và đóng tab xử lý như `SEQ-02B`.
 
 
 *Hình 4.4.5 — Sơ đồ tuần tự cho UC-13 (`SEQ-05`)*
@@ -407,7 +407,7 @@ UC-12 (đổi giờ hoạt động hoặc xóa sân) không có sơ đồ riêng
 | Hạng mục | Nội dung |
 | ----- | ----- |
 | **Dùng chung** | Kiểm tra quyền chủ sở hữu cơ sở (cả lúc xem trước và lúc xác nhận); xem trước các booking và hold bị ảnh hưởng; chờ hold kết thúc; từ chối toàn bộ nếu một booking bị ảnh hưởng bắt đầu trong dưới 24 giờ (đúng 24 giờ vẫn được); cảnh báo; xác nhận rồi kiểm tra lại (kể cả so danh sách bị ảnh hưởng với danh sách chủ sân đã xác nhận, khác thì trả danh sách mới để xác nhận lại); hủy toàn bộ booking bị ảnh hưởng và ghi thay đổi lịch cùng thông báo trong một transaction (BR-11, FR-03, FR-29, FR-30). |
-| **Khác biệt** | Tham số `change` của `previewChange`/`applyChange` là thay đổi giờ hoạt động hoặc việc xóa sân, không phải `block(courtId, period)`. Tập bị ảnh hưởng là các booking tương lai có slot nằm ngoài giờ mới (đổi giờ) hoặc mọi booking tương lai của sân (xóa sân). Không áp quy tắc "khoảng khóa phải bắt đầu sau 24 giờ" của BR-12 vì không có khoảng khóa; chỉ áp luật 24 giờ của FR-29 cho booking bị ảnh hưởng. Bước ghi cuối cập nhật giờ hoạt động hoặc xóa sân (cách lưu do 3.1.2 quyết định) thay vì tạo `BlockedPeriod`. Màn hình xem trước nêu cả phần bị ảnh hưởng của từng booking (UC-12 bước 3). Nếu không có booking nào bị ảnh hưởng thì không hủy gì (A1), và chủ sân có thể hủy thao tác trước khi xác nhận (A2). |
+| **Khác biệt** | Tham số `change` của `previewChange`/`applyChange` là thay đổi giờ hoạt động hoặc việc xóa sân, không phải `block(courtId, period)`. Tập bị ảnh hưởng là các booking tương lai có slot nằm ngoài giờ mới (đổi giờ) hoặc mọi booking tương lai của sân (xóa sân). Không áp quy tắc "khoảng khóa phải bắt đầu sau 24 giờ" của BR-12 vì không có khoảng khóa; chỉ áp luật 24 giờ của FR-29 cho booking bị ảnh hưởng. Bước ghi cuối cập nhật giờ hoạt động hoặc xóa sân (cách lưu do 3.1.2 quyết định, `ASM-08`) thay vì tạo `BlockedPeriod`. Màn hình xem trước nêu cả phần bị ảnh hưởng của từng booking (UC-12 bước 3). Nếu không có booking nào bị ảnh hưởng thì không hủy gì (A1), và chủ sân có thể hủy thao tác trước khi xác nhận (A2). |
 | **Operation** | Dùng lại `verifyFacilityOwner`, `previewChange`, `applyChange`, `cancelAffected` và `notify`; chỉ khác hai điểm vào ở `FacilityController` (xem trước/xác nhận thay đổi giờ hoạt động hoặc xóa sân) và thao tác ghi cuối. |
 
 ## 8. Các operation dùng trong sơ đồ tuần tự (`SEQ-OPS`)
@@ -454,6 +454,7 @@ UC-12 (đổi giờ hoạt động hoặc xóa sân) không có sơ đồ riêng
 
 * **Điểm còn mở cần người kiểm tra xác nhận:**
 
-  * `@Lysivi2005`: xác nhận bảng `SEQ-OPS` (Mục 8), gồm `ReleaseJob` thuộc thành phần nào, khớp tên lớp và phương thức trong Class Diagram (3.3.2).
-
-  * `@KhoiVuong2210`: xác nhận ranh giới transaction ở `createHoldAtomically`, `confirmBooking`, `cancelBooking`, `applyChange`; cách `applyChange` bảo đảm không có hold mới chen vào giữa lúc áp dụng; chu kỳ nhả không quá 1 giây đạt mốc 5 giây (cần thử nghiệm 2.3.1); các kết quả lỗi nghiệp vụ trong đặc tả API (3.1.4).
+  * `@Lysivi2005` (phụ trách Class Diagram `#31`, API `#12`, UI `#29`):
+    * Đồng bộ tên lớp và chữ ký `createHold` (cùng bảng `SEQ-OPS` Mục 8 và vị trí của `ReleaseJob`) với sơ đồ lớp ở PR `#31` (Task 3.3.2), kể cả cách xác định ngữ cảnh đặt tại quầy.
+    * Ghi cùng một cách trả ba kết quả giải phóng giữ chỗ (`Releasing`, `ReleaseFailed`, `Released`) trong đặc tả giao tiếp API `#12` (Task 3.1.4) và cách UI ở PR `#29` (Task 3.2.1) xử lý từng kết quả (giao diện chỉ cho chọn lại sau khi nhận `Released`).
+  * `@buikhoa130406` (phụ trách thử kết nối `#7` — Task 2.3.1): kiểm chứng chu kỳ nhả không quá 1 giây; mốc giải phóng 5 giây cần bằng chứng đo riêng.
