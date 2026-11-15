@@ -2,7 +2,7 @@
 
 - **Mã đối tượng truy vết:** `CLS-DIAG` (Biểu đồ lớp), `CLS-01`..`CLS-08` (Đặc tả 8 lớp trọng yếu), `CLS-MAP` (Ánh xạ Domain Model `3.3.1` & Sequence `3.3.3`)
 - **Người thực hiện:** Lý Sĩ Vĩ (`@Lysivi2005`)
-- **Người kiểm tra:** Khôi (`@KhoiVuong2210` — khả năng hiện thực, kiểu dữ liệu, thao tác), Trí (`@nmt1206` — trách nhiệm nghiệp vụ)
+- **Người kiểm tra:** Trí (`@nmt1206` — phụ trách dữ liệu `#10` & thống nhất chữ ký `SEQ-OPS` / `PR #27`), Vĩ (`@Lysivi2005` — phụ trách đầu mối API `#12`)
 - **Tài liệu đầu vào:** Baseline PA2 (`pa/PA2/T04-PA2-SoftwareRequirementsSpecification.docx`), Kiến trúc `docs/design/architecture/architecture-design.md` (`3.1.1`), Domain Model `docs/design/domain/domain-model.md` (`3.3.1`), Sequence & State (`3.3.3`, `3.3.4`)
 
 > **Lưu ý đồng bộ:** Thiết kế lớp bám sát kiến trúc **Modular Monolith (`Controller -> Service -> Repository`)** đã chốt ở `3.1.1`, đồng bộ khái niệm với Domain Model `DM-01` (`3.3.1`) và giữ chặt phạm vi PA2 (khung 30 phút, giữ chỗ 5 phút All-or-Nothing, tự động xác nhận, hủy $\ge 3$ giờ, chặn lịch $\ge 24$ giờ, thông báo In-app không có `isRead`, mỗi cơ sở 1 môn thể thao, không thanh toán trực tuyến).
@@ -311,7 +311,7 @@ classDiagram
   - `previewScheduleChange(...)` & `applyScheduleChange(...)` (luồng 2 bước dùng chung cho `createScheduleBlock`, `updateOperatingHours`, `deleteCourt` thông qua `ScheduleChangeInput` gồm loại thay đổi `BLOCK | OPERATING_HOURS | DELETE_COURT`):
     1. Nếu có `SlotHold` đang `ACTIVE` bị ảnh hưởng $\rightarrow$ từ chối và yêu cầu chủ sân chờ lượt giữ kết thúc rồi thử lại (`FR-29`, `AC-30`).
     2. Tìm toàn bộ `Booking` bị ảnh hưởng; nếu bất kỳ đơn nào có `isAffectedUnder24Hours(now) === true` $\rightarrow$ từ chối toàn bộ thao tác (`FR-29`, `AC-29`).
-    3. Nếu tất cả đều $\ge 24$ giờ $\rightarrow$ trả danh sách đơn bị ảnh hưởng ở bước xem trước. Khi chủ sân xác nhận và `applyScheduleChange` kiểm tra lại trong Transaction, nếu phát sinh đơn mới hợp lệ chưa có trong `expectedBookingIds` thì trả lại danh sách mới để chủ sân xác nhận lại; nếu danh sách khớp $\rightarrow$ hủy toàn bộ đơn bị ảnh hưởng, cập nhật lịch chung và tạo `Notification` In-app (`FR-30`).
+    3. Nếu tất cả đều $\ge 24$ giờ $\rightarrow$ trả danh sách đơn bị ảnh hưởng ở bước xem trước. Khi chủ sân xác nhận và `applyScheduleChange` kiểm tra lại trong Transaction, hệ thống **so sánh toàn bộ tập lượt đặt đã được chủ sân xác nhận (`expectedBookingIds`) với tập đơn bị ảnh hưởng mới**; nếu có **thêm hoặc bớt** lượt so với tập đã xác nhận thì trả lại danh sách mới để chủ sân xác nhận lại theo `SEQ-04`; nếu hai tập khớp hoàn toàn $\rightarrow$ hủy toàn bộ đơn bị ảnh hưởng, cập nhật lịch chung và tạo `Notification` In-app (`FR-30`).
   - `createDirectBooking(ownerId, facilityId, selections)`:
     1. Kiểm tra `facility.isOwnedBy(ownerId)` và vai trò `OWNER` tại cơ sở đó (`FR-03`, `NFR-04`).
     2. Xác định ngữ cảnh đặt tại quầy (`isDirect = true`) và gọi `bookingService.createHold(ownerId, UserRole.OWNER, facilityId, selections, true)` $\rightarrow$ `bookingService.confirmBooking(ownerId, hold.id, true)`. Cách này dùng chung hoàn toàn Lịch chung và Transaction chống trùng, chỉ miễn mốc 60 phút và tuyệt đối không ghi đè lên `SlotHold` đang giữ hoặc `Booking` đã đặt (`FR-21`, `BR-08`, `BR-13`).
@@ -365,5 +365,4 @@ classDiagram
   - [x] Làm rõ cách `createDirectBooking` truyền `isDirect = true` sau khi kiểm tra quyền sở hữu để miễn mốc 60 phút cho đặt tại quầy (`AC-25`).
   - [x] Đưa bảng hợp đồng chữ ký và mã lỗi cho đủ 4 luồng (giữ, xác nhận, nhả, hủy) để thống nhất cùng `@nmt1206`.
 - **Điểm cần người kiểm tra xác nhận:**
-  - `@KhoiVuong2210`: xác nhận kiểu dữ liệu, tập Enum (`HoldStatus`, `BookingStatus`) và các mã lỗi trả về khớp đặc tả API/ERD (`3.1.2`, `3.1.4`).
-  - `@nmt1206`: xác nhận thống nhất bộ chữ ký tham số (`userId, actorRole, facilityId, selections, isDirect`) và bảng mã lỗi giữa `3.3.2` và `SEQ-OPS` (`3.3.3`).
+  - `@nmt1206` (Trí — đầu mối dữ liệu `#10`) & `@Lysivi2005` (Vĩ — đầu mối API `#12`): thống nhất phương án chữ ký chung cho `createHold`, xác nhận (`confirmBooking`), nhả (`releaseHold`), hủy (`cancelBookingByPlayer`) cùng kết quả lỗi trong API `#12`, sau đó cập nhật đồng bộ cả **PR #27** (`SEQ-OPS`) và **PR #31** (`3.3.2`).
