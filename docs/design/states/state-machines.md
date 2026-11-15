@@ -3,8 +3,7 @@
 - **Mã đối tượng truy vết:** `STM-01` (Vòng đời `Hold`), `STM-02` (Vòng đời `TimeSlot`), `STM-03` (Vòng đời `Booking`)
 - **Issue liên quan:** `#20` — 3.3.4 Thiết kế vòng đời và chuyển trạng thái
 - **Người chịu trách nhiệm chính:** Nguyễn Minh Trí (`@nmt1206`)
-- **Người kiểm tra:** Khôi (`@KhoiVuong2210` — kiểm tra tác động dữ liệu); Vĩ (`@Lysivi2005` — kiểm tra lớp/UI).
-
+- **Người kiểm tra:** Khoa (`@buikhoa130406` — kiểm tra quy tắc chuyển trạng thái); Vĩ (`@Lysivi2005` — kiểm tra lớp, API `#12` và cách giao diện `#29` thể hiện trạng thái).
 ---
 
 Ba đối tượng có hành vi phụ thuộc vào trạng thái: `Hold`, `TimeSlot` và `Booking`. Mỗi đối tượng được thể hiện bằng sơ đồ trạng thái kèm bảng chuyển trạng thái và luật kích hoạt. Các chuyển trạng thái khớp với sơ đồ tuần tự: `STM-01` với `SEQ-01`, `SEQ-02`, `SEQ-02B`; `STM-03` với `SEQ-02`, `SEQ-03`, `SEQ-04`.
@@ -128,18 +127,17 @@ stateDiagram-v2
 
 ---
 
-## 4. Yêu cầu đối với dữ liệu và lớp (`STM-OPEN`)
+## 4. Yêu cầu đối với dữ liệu, API và lớp (`STM-OPEN`)
 
-Đây là **đề nghị**, người sở hữu task quyết định.
+Đây là các yêu cầu chuyển giao theo phân công tạm thời để đưa vào thiết kế dữ liệu (`#10`), API (`#12`), lớp (`#31`) và UI (`#29`).
 
 | Cho | Nội dung | Căn cứ |
 | :--- | :--- | :--- |
-| `@KhoiVuong2210` (3.1.2) | `Hold.status` có 4 giá trị (`Active`, `Confirmed`, `Released`, `Expired`) cùng `expiresAt`; truy vấn tìm hold hết hạn cần nhanh (index theo trạng thái và `expiresAt`) | `STM-01`, ASR-G2 |
-| `@KhoiVuong2210` | `Booking.status` có 3 giá trị; không xóa vật lý booking đã hủy để giữ lịch sử (FR-16) | `STM-03` |
-| `@KhoiVuong2210` | Với hold `Expired`, cần phân biệt `Releasing` và `ReleaseFailed` (ghi nhận nhả lỗi, hoặc tính từ `expiresAt` quá 5 giây mà chưa `Released`) để API trả đúng kết quả cho giao diện | `STM-01`, `SEQ-02B`, FR-14 |
-| `@KhoiVuong2210` | Chuyển trạng thái phải nguyên tử: xác nhận và nhả hết hạn không thể cùng thắng; hủy booking, ghi thay đổi lịch và tạo thông báo trong một transaction | `STM-01`, `STM-03`, `SEQ-04` |
-| `@Lysivi2005` (3.3.2, 3.2.1) | `Hold`, `Booking` có thao tác chuyển trạng thái kiểm tra điều kiện; trạng thái `TimeSlot` là kết quả truy vấn; UI phân biệt `Active` (đếm ngược, Confirm bật), `Expired` với kết quả `Releasing` (thông báo hết hạn, Confirm tắt, chưa cho chọn lại, không báo lỗi) hoặc `ReleaseFailed` (báo lỗi giải phóng, không cho tiếp tục) và `Released` (cho chọn lại) | `STM-01`, `STM-02` |
-
+| `@nmt1206` (3.1.2 — `#10`) | Đưa quy tắc trạng thái và chuyển đổi vào thiết kế dữ liệu: `Hold.status` có 4 giá trị (`Active`, `Confirmed`, `Released`, `Expired`) cùng `expiresAt`; đánh index theo trạng thái và `expiresAt` để truy vấn hold hết hạn nhanh | `STM-01`, ASR-G2 |
+| `@nmt1206` (3.1.2 — `#10`) | `Booking.status` có 3 giá trị (`Confirmed`, `CancelledByPlayer`, `CancelledByOwner`); không xóa vật lý booking đã hủy để giữ lịch sử (FR-16) | `STM-03` |
+| `@nmt1206` (3.1.2 — `#10`) | Với hold `Expired`, dữ liệu cần hỗ trợ phân biệt `Releasing` và `ReleaseFailed` (ghi nhận nhả lỗi, hoặc tính từ `expiresAt` quá 5 giây mà chưa `Released`) | `STM-01`, `SEQ-02B`, FR-14 |
+| `@nmt1206` (3.1.2 — `#10`) | Bảo đảm chuyển trạng thái nguyên tử ở tầng dữ liệu/giao dịch: xác nhận và nhả hết hạn không thể cùng thắng; hủy booking, ghi thay đổi lịch và tạo thông báo nằm trong một transaction | `STM-01`, `STM-03`, `SEQ-04` |
+| `@Lysivi2005` (3.1.4 — `#12`, 3.3.2 — `#31`, 3.2.1 — `#29`) | Đặc tả API `#12` trả đúng 3 kết quả giải phóng giữ chỗ (`Releasing`, `ReleaseFailed`, `Released`); lớp `Hold`, `Booking` ở `#31` có thao tác chuyển trạng thái kiểm tra điều kiện; giao diện `#29` thể hiện rõ `Active` (đếm ngược, Confirm bật), `Releasing` (thông báo hết hạn, Confirm tắt, chưa cho chọn lại, không báo lỗi), `ReleaseFailed` (báo lỗi giải phóng, không cho tiếp tục) và chỉ cho chọn lại khi nhận `Released` | `STM-01`, `STM-02`, `SEQ-02B` |
 ---
 
 ## 5. Giá trị biên để PA4 kiểm thử
@@ -174,5 +172,4 @@ stateDiagram-v2
   2. Trạng thái "Đã hoàn thành" của Booking suy ra từ thời gian (`status == Confirmed && now >= latestEndTime`).
   3. Hold `Expired` là trạng thái "hết hạn nhưng chưa nhả xong": từ chối xác nhận ngay, slot vẫn `Held` cho tới khi `Released`.
 - **Điểm còn mở cần người kiểm tra xác nhận:**
-  - `@KhoiVuong2210`: xác nhận tập giá trị cột `status` của bảng `Hold` và `Booking` trong schema PostgreSQL (3.1.2) và các yêu cầu ở `STM-OPEN`.
-  - `@Lysivi2005`: xác nhận hiển thị nhãn trạng thái trên SC-06 (theo trạng thái hold) và danh sách booking SC-07 (theo điều kiện suy dẫn thời gian) (3.2.1).
+  - `@Lysivi2005` (phụ trách API `#12`, lớp `#31`, UI `#29`): xác nhận hợp đồng API `#12` và cách giao diện trên SC-06 thể hiện 3 kết quả giải phóng (`Releasing`, `ReleaseFailed`, `Released`), cũng như nhãn trạng thái suy dẫn theo thời gian trên danh sách booking SC-07 (3.2.1).
