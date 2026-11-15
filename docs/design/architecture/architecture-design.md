@@ -51,53 +51,53 @@ flowchart TB
     User["👤 Khách / Người chơi / Chủ sân<br/>(Google Chrome / Apple Safari trên Desktop & Mobile)"]
 
     subgraph Cloud["☁️ Cloud Linux Environment"]
-        SPA["🌐 Web Application<br/>(React SPA)<br/>Giao diện responsive, đếm ngược giữ chỗ từ server timestamp,<br/>gửi tín hiệu nhả Hold khi đóng tab (FR-26)"]
-        API["⚙️ Backend API Server<br/>(Node.js + Express)<br/>Xử lý nghiệp vụ, phân quyền RBAC, Transaction đặt sân"]
-        Worker["⏱️ Hold Expiry Worker (ReleaseJob)<br/>(Node.js Scheduled Job / Interval <= 1s)<br/>Quét & giải phóng lượt giữ chỗ hết hạn 5 phút (<= 5s)"]
+        SPA["🌐 Web Application<br/>(React SPA)<br/>Giao diện responsive, giữ Hold khi F5 theo server expiresAt,<br/>chỉ nhả sớm khi thoát luồng xác định được (FR-25, FR-26)"]
+        API["⚙️ Backend API Server & Background Job<br/>(Node.js + Express Process)<br/>Xử lý nghiệp vụ, RBAC, Transaction đặt sân<br/>và chạy Hold Expiry Worker (ReleaseJob) định kỳ"]
         DB[("🗄️ PostgreSQL Database<br/>Lưu tài khoản (hashed password), cơ sở, sân con,<br/>lịch chung, lượt giữ chỗ, đơn đặt & thông báo In-app")]
     end
 
     User -- "Sử dụng giao diện Web (HTTPS)" --> SPA
     SPA -- "Gọi REST API (JSON / HTTPS + JWT)" --> API
-    API -- "Đọc / Ghi & ACID Transaction (TCP/SQL)" --> DB
-    Worker -- "Giải phóng Hold quá hạn mỗi ~1s (TCP/SQL)" --> DB
+    API -- "Đọc / Ghi, Transaction & ReleaseJob qua Repository (TCP/SQL)" --> DB
 ```
 
 ---
 
 ## 4. Sơ đồ C4 Level 3 — Component Diagram (`C4-CMP` — Backend API Server)
 
-Mô tả cấu trúc các module bên trong **Node.js + Express API Server** theo kiến trúc phân tầng (`Controller -> Service -> Repository`).
+Mô tả cấu trúc các module bên trong **Node.js + Express Process** theo kiến trúc phân tầng (`Controller -> Service -> Repository`).
 
 ```mermaid
 flowchart LR
     SPA["🌐 React SPA"]
 
-    subgraph Backend["⚙️ Node.js + Express API Server"]
+    subgraph Backend["⚙️ Node.js + Express Process"]
         MW["🛡️ Auth & RBAC Middleware<br/>Xác thực JWT, kiểm tra vai trò & bảo vệ API (NFR-04)"]
+        Job["⏱️ Hold Expiry Worker (ReleaseJob)<br/>Tác vụ nền định kỳ (tham số thiết kế <= 1s)"]
 
         subgraph Modules["Các Module Nghiệp vụ (Controller → Service)"]
             AuthMod["🔐 Auth Module<br/>Đăng ký, Đăng nhập, Hash mật khẩu (NFR-05)"]
             FacMod["🔍 Facility & Search Module<br/>Tìm kiếm theo môn/vị trí, lọc tiện ích, xem giá & lịch trống"]
-            BookMod["📅 Booking & Hold Engine<br/>Kiểm tra 2 khung, giữ chỗ 5p All-or-Nothing,<br/>recheck & tự động xác nhận, hủy đơn >= 3h,<br/>chứa ReleaseJob (Hold Expiry Worker)"]
+            BookMod["📅 Booking & Hold Engine<br/>Kiểm tra 2 khung, giữ chỗ 5p All-or-Nothing,<br/>recheck & tự động xác nhận, hủy đơn >= 3h,<br/>hàm releaseExpiredHolds(now)"]
             OwnerMod["🏟️ Owner Schedule Module<br/>Kiểm tra quyền sở hữu cơ sở, quản lý cơ sở/sân/giá,<br/>đặt trực tiếp, chặn lịch/đổi giờ >= 24h & chờ Hold ảnh hưởng"]
             NotiMod["🔔 In-App Notification Module<br/>Lưu & truy xuất thông báo hủy đơn trong ứng dụng"]
         end
 
-        Repo["📦 Data Access Layer (Repositories)<br/>Quản lý Transaction, Row Lock & Query tối ưu"]
+        Repo["📦 Data Access Layer (Repositories)<br/>Quản lý Transaction, Row Lock / Ràng buộc & Query tối ưu"]
     end
 
     DB[("🗄️ PostgreSQL")]
 
     SPA -- "HTTPS / JSON" --> MW
     MW --> AuthMod & FacMod & BookMod & OwnerMod & NotiMod
+    Job -- "Gọi releaseExpiredHolds(now)" --> BookMod
     AuthMod & FacMod & BookMod & OwnerMod & NotiMod --> Repo
     OwnerMod -. "Tái sử dụng luồng giữ/xác nhận (đặt trực tiếp)" .-> BookMod
     OwnerMod -. "Tạo thông báo hủy đơn (trong Transaction)" .-> NotiMod
     Repo -- "SQL / Pool" --> DB
 ```
 
-> **Làm rõ vị trí `ReleaseJob` (xác nhận theo `SEQ-OPS` trong `3.3.3`):** Thành phần `ReleaseJob` trong sơ đồ tuần tự của Trí tương ứng với **`Hold Expiry Worker`** — tác vụ nền chạy định kỳ mỗi $\le 1$ giây bên trong process Backend (thuộc phạm vi xử lý của **`Booking & Hold Engine`**), gọi hàm giải phóng Hold quá hạn để bảo đảm SLA giải phóng $\le 5$ giây (`NFR-03`).
+> **Thống nhất vị trí & đường gọi của `ReleaseJob` (`Hold Expiry Worker`) giữa `C4-CNT`, `C4-CMP`, `C4-DEP` và `SEQ-02B`:** `Hold Expiry Worker` (`ReleaseJob`) là một **tác vụ nền chạy trong tiến trình Node.js + Express** (không tách container gọi thẳng DB). Theo chu kỳ thiết kế, `ReleaseJob` gọi vào phương thức `releaseExpiredHolds(now)` của **`Booking & Hold Engine`**, đi qua **`Data Access Layer (Repositories)`** để thực thi Transaction cập nhật PostgreSQL — khớp 1–1 với đường gọi `ReleaseJob -> HoldService/BookingService -> Database` trong `SEQ-02B`.
 
 ---
 
@@ -119,14 +119,14 @@ flowchart LR
 
     subgraph CloudServer["☁️ Cloud Linux Server"]
         Proxy["🔀 Reverse Proxy (Nginx)<br/>Phục vụ Static React Build & Proxy /api"]
-        NodeApp["⚙️ Node.js + Express Process<br/>API Server + Hold Expiry Worker (ReleaseJob)"]
+        NodeApp["⚙️ Node.js + Express Process<br/>(REST API + Booking & Hold Engine + ReleaseJob)"]
         PG[("🗄️ PostgreSQL Server<br/>Dữ liệu & Lịch chung")]
     end
 
     Desktop & Mobile -- "HTTPS (443)" --> Proxy
     Proxy -- "Static Files" --> Desktop & Mobile
     Proxy -- "HTTP /api (Localhost)" --> NodeApp
-    NodeApp -- "SQL (Localhost / SSL)" --> PG
+    NodeApp -- "SQL qua Repository Pool (Localhost / SSL)" --> PG
     Repo -- "Push / PR" --> Actions
 ```
 
@@ -136,8 +136,8 @@ flowchart LR
 
 | Yêu cầu / Quy tắc | Cách kiến trúc đáp ứng | Đối chiếu ADR / ASR |
 |---|---|---|
-| **Nhất quán & Chống trùng slot (`NFR-02`, `FR-13`)** | Xử lý trong PostgreSQL Transaction kết hợp khóa bi quan (*Pessimistic Lock*) hoặc ràng buộc duy nhất theo `(court_id, slot_time)` trên lịch chung; đảm bảo *All-or-Nothing* và chỉ 1 yêu cầu giữ chỗ thành công khi tranh chấp đồng thời. | `ADR-002`, `ASR-G1`, `ASR-G3` |
-| **Giữ chỗ 5 phút, F5, Đóng tab & Nhả $\le 5\text{s}$ (`NFR-03`, `FR-14`, `FR-25`, `FR-26`)** | Thời điểm hết hạn `expires_at` lưu ở Backend/DB. Khi F5, Frontend lấy lại `expires_at` từ API nên không reset 5 phút. Khi đóng tab/rời trang, React SPA gửi tín hiệu qua `beforeunload`/`navigator.sendBeacon` để thử nhả Hold sớm (`FR-26`). Kết hợp **kiểm tra `now >= expires_at` tức thời khi xác nhận** và **`Hold Expiry Worker` (`ReleaseJob`)** quét mỗi $\le 1$ giây để hoàn tất giải phóng trong tối đa 5 giây kể cả khi mất kết nối. | `ADR-002`, `ASR-G2` |
+| **Nhất quán & Chống trùng slot (`NFR-02`, `FR-13`)** | Xử lý trong PostgreSQL Transaction (*All-or-Nothing*) qua `Booking & Hold Engine` và `Repositories`; cơ chế chống trùng chi tiết (khóa dòng hoặc ràng buộc duy nhất theo sân/giờ) đang chờ chốt đồng bộ với `#10` / `ADR-002`. | `ADR-002`, `ASR-G1`, `ASR-G3` |
+| **Giữ chỗ 5 phút, F5, Đóng tab & Mục tiêu nhả $\le 5\text{s}$ (`NFR-03`, `FR-14`, `FR-25`, `FR-26`)** | Thời điểm hết hạn `expires_at` lưu ở PostgreSQL. Khi F5, React SPA **không** tự gửi nhả Hold qua `beforeunload`/`pagehide` mà gọi API lấy lại `expires_at` nên không mất giữ chỗ hay reset 5 phút (`FR-25`). Với đóng tab/mất kết nối (`FR-26`), chỉ nhả sớm ở hành động thoát luồng phân biệt được với F5; các trường hợp còn lại do **`Hold Expiry Worker` (`ReleaseJob`)** xử lý sau khi hết hạn.<br>**Mục tiêu đo & Xử lý lỗi nhả:** Chu kỳ quét $\le 1\text{s}$ là tham số thiết kế; mốc $\le 5\text{s}$ (`NFR-03`) là **mục tiêu hiệu năng cần đo kiểm chứng** từ thời điểm `expires_at` đến khi PostgreSQL hoàn tất ghi `RELEASED` và mở lại slot. Khi nhả thất bại ở DB, **`Booking & Hold Engine` + `ReleaseJob`** giữ Hold ở trạng thái `EXPIRED` (vẫn từ chối xác nhận tức thì theo `now >= expires_at`), ghi log lỗi và **tự động thử lại ở chu kỳ kế tiếp**; API trả lỗi thực tế nếu UI truy vấn để người dùng không thao tác như đã nhả (`FR-14`). | `ADR-002`, `ASR-G2` |
 | **Phân quyền & Bảo mật (`NFR-04`, `NFR-05`)** | `Auth & RBAC Middleware` kiểm tra JWT và vai trò ở lớp dùng chung; kiểm tra quyền sở hữu (`facility.owner_id === user.id`, `hold/booking.user_id === user.id`) tại Backend trước mọi thao tác. Mật khẩu được băm (bcrypt/argon2) trước khi lưu DB. | `ADR-003`, `ASR-G4`, `ASR-G9` |
 | **Hiệu năng 50 người dùng (`NFR-06`)** | React SPA giảm tải render server; Backend stateless dùng Connection Pool tới PostgreSQL kết hợp đánh Index cho tìm kiếm sân và truy vấn lịch theo ngày (P95 $\le 2$ giây). | `ADR-001`, `ASR-G7` |
 | **Thông báo In-app (`NFR-09`, `FR-30`)** | Khi Chủ sân hủy đơn do chặn lịch/đổi giờ/xóa sân ($\ge 24$ giờ), `Owner Schedule Module` gọi `In-App Notification Module` ghi trực tiếp bản ghi thông báo vào DB trong cùng Transaction, không gọi dịch vụ Email/SMS bên ngoài. | `CON-05`, `ASR-G6`, `ASR-G9` |
