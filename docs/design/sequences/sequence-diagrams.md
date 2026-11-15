@@ -430,9 +430,9 @@ UC-12 (đổi giờ hoạt động hoặc xóa sân) không có sơ đồ riêng
 
   * \[x\] Mọi thông điệp trả về đi qua đúng thứ tự `Database -> Service -> Controller -> Page`.
 
-  * \[ x\] Đã mở từng khối Mermaid trên preview GitHub (hoặc mermaid.live) và không có lỗi cú pháp.
+  * \[x\] Đã mở từng khối Mermaid trên preview GitHub (hoặc mermaid.live) và không có lỗi cú pháp.
 
-  * \[ x\] Đã xuất lại toàn bộ ảnh `sd-*.png` từ nguồn Mermaid mới.
+  * \[x\] Đã xuất lại toàn bộ ảnh `sd-*.png` từ nguồn Mermaid mới.
 
 * **Các quyết định thiết kế chính:**
 
