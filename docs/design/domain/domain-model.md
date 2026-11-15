@@ -1,6 +1,6 @@
 # 4.1 Domain Model (3.3.1)
 
-- **Mã đối tượng truy vết:** `DM-01` (Sơ đồ miền tổng thể), `DM-ENT-01`..`DM-ENT-13` (Các khái niệm miền) và `DM-INV-01`..`DM-INV-06` (Ràng buộc miền)
+- **Mã đối tượng truy vết:** `DM-01` (Sơ đồ miền tổng thể), `DM-ENT-01`..`DM-ENT-13` (Các khái niệm miền) và `DM-INV-01`..`DM-INV-08` (Ràng buộc miền)
 - **Issue liên quan:** `#17` — 3.3.1 Xây dựng domain model
 - **Người chịu trách nhiệm chính:** Nguyễn Minh Trí (`@nmt1206`)
 - **Người kiểm tra:** Khôi (`@KhoiVuong2210` — đối chiếu dữ liệu); Vĩ (`@Lysivi2005` — kiểm tra ánh xạ sang lớp).
@@ -10,6 +10,7 @@
 ## 1. Sơ đồ Mô hình Miền (`DM-01`)
 
 Mô hình miền (domain model) thể hiện các khái niệm nghiệp vụ của hệ thống đặt sân và quan hệ giữa chúng. Mô hình dùng thuật ngữ trong bảng thuật ngữ của PA2 và không chứa lớp cài đặt. Tên thuộc tính là thuộc tính khái niệm, chưa có kiểu dữ liệu hay khóa.
+
 
 *Hình 4.1 — Mô hình miền của hệ thống đặt sân thể thao (`DM-01`)*
 
@@ -41,6 +42,7 @@ classDiagram
     }
     class Court {
         name
+        status
     }
     class Price {
         amount
@@ -111,9 +113,9 @@ classDiagram
 
 | Mã đối tượng | Thực thể | Mô tả | Thuộc tính chính | Truy vết PA2 |
 | :--- | :--- | :--- | :--- | :--- |
-| **`DM-ENT-01`** | **User** | Một tài khoản có đúng một vai trò `role` là `Player` hoặc `FacilityOwner` . Khách (guest) chưa có tài khoản nên không phải thực thể. | `name`, `contact` (điện thoại hoặc email), `passwordHash`, `role` | FR-01, FR-24, NFR-05 |
-| **`DM-ENT-02`** | **Facility** | Một cơ sở thuộc về một chủ sân (`FacilityOwner`), mỗi chủ sân có `0..*` cơ sở. Chuỗi nhiều chi nhánh thì mỗi chi nhánh là một `Facility` độc lập. Hỗ trợ một môn thể thao . | `name`, `address`, `description` | FR-03, FR-04, FR-17, BR-10 |
-| **`DM-ENT-03`** | **Court** | Một sân con có tên hoặc số hiệu được định danh riêng trong cơ sở. | `name` | FR-06, FR-17 |
+| **`DM-ENT-01`** | **User** | Một tài khoản có đúng một vai trò `role` là `Player` hoặc `FacilityOwner`. Khách (guest) chưa có tài khoản nên không phải thực thể. | `name`, `contact` (điện thoại hoặc email), `passwordHash`, `role` | FR-01, FR-24, NFR-05 |
+| **`DM-ENT-02`** | **Facility** | Một cơ sở thuộc về một chủ sân (`FacilityOwner`), mỗi chủ sân có `0..*` cơ sở. Chuỗi nhiều chi nhánh thì mỗi chi nhánh là một `Facility` độc lập. Hỗ trợ một môn thể thao. | `name`, `address`, `description` | FR-03, FR-04, FR-17, BR-10 |
+| **`DM-ENT-03`** | **Court** | Một sân con có tên hoặc số hiệu được định danh riêng trong cơ sở. `status` cho biết sân đang hoạt động hay đã bị chủ sân xóa (UC-12); sân đã xóa không còn chọn được và không còn slot khả dụng. Cách lưu (xóa mềm hay cách khác) do Khôi quyết ở 3.1.2. | `name`, `status` (đang hoạt động / đã xóa) | FR-06, FR-17, FR-29 |
 | **`DM-ENT-04`** | **Sport, Amenity** | Môn thể thao cơ sở hỗ trợ (đúng một) và các tiện ích đi kèm (`*`). Dùng cho tìm kiếm và lọc. | `name` | FR-04, FR-05 |
 | **`DM-ENT-05`** | **OperatingHours** | Giờ mở cửa và đóng cửa của cơ sở theo ngày trong tuần . | `dayOfWeek`, `openTime`, `closeTime` | FR-18, FR-29, BR-11 |
 | **`DM-ENT-06`** | **Price** | Giá của một sân. Cấu trúc giá (một mức hay theo khung giờ) chưa chốt . | `amount` | FR-07, FR-19 |
@@ -133,18 +135,20 @@ classDiagram
 | :--- | :--- | :--- |
 | **`DM-INV-01`** | Mọi `HoldItem`/`BookingItem` của một `Hold`/`Booking` thuộc `Court` của đúng `Facility` mà `Hold`/`Booking` đó gắn với. | FR-09, BR-03, AC-14 |
 | **`DM-INV-02`** | Trong một `Hold`/`Booking`, mỗi `Court` có tối đa một item, và item đó phủ một dải slot 30 phút liên tiếp (giờ bắt đầu và số slot có thể khác nhau giữa các sân). | BR-03, AC-13 |
-| **`DM-INV-03`** | Một `TimeSlot` không được đồng thời thuộc hai `Hold` đang hoạt động, một `Hold` và một `Booking` đã xác nhận, hoặc một `BlockedPeriod`. | NFR-02, BR-02, BR-13, FR-22 |
+| **`DM-INV-03`** | Một sân tại một khung giờ (một `TimeSlot`) có **tối đa một `Booking` ở trạng thái `Confirmed`**; khi nhiều yêu cầu cùng tranh một slot thì chỉ một yêu cầu giữ được chỗ. Đây là ràng buộc nghiệp vụ **riêng**, không được thay bằng việc suy ra `derivedStatus = booked`: trạng thái suy ra chỉ phục vụ hiển thị lịch chung. | NFR-02, FR-13, BR-02, AC-18 |
 | **`DM-INV-04`** | `Hold.expiresAt = createdAt + 5 phút` và không đổi sau khi tạo (không gia hạn, tải lại trang không đặt lại). | BR-01, BR-07, FR-25, FR-31 |
 | **`DM-INV-05`** | `Hold` chỉ được tạo cho người đã đăng nhập, sau khi toàn bộ lựa chọn hợp lệ; một phần không hợp lệ thì không có hold nào. | BR-04, BR-05, FR-13, FR-23 |
 | **`DM-INV-06`** | `Booking` chỉ sinh ra từ một `Hold` hợp lệ, ngay ở trạng thái `Confirmed`; không có trạng thái chờ duyệt. | BR-06, FR-11, FR-12 |
+| **`DM-INV-07`** | `HoldItem`/`BookingItem` mới chỉ trỏ tới `Court` đang hoạt động. Khi sân bị xóa, các booking tương lai của sân đó bị hủy toàn bộ theo quy trình chung của chủ sân (24 giờ, chờ hold, cảnh báo, thông báo). | FR-17, FR-29, FR-32, BR-11 |
+| **`DM-INV-08`** | Một `TimeSlot` đang bị chiếm bởi một `Hold` đang hoạt động, một `Booking` đã xác nhận hoặc một `BlockedPeriod` thì không được bị chiếm thêm bởi nguồn thứ hai: không đồng thời thuộc hai `Hold`, một `Hold` và một `Booking`, hoặc một `BlockedPeriod` cùng một `Hold`/`Booking`. | BR-02, BR-13, FR-22, FR-29 |
 
-`derivedStatus` của `TimeSlot` được tính theo thứ tự ưu tiên: **unavailable** nếu nằm ngoài `OperatingHours`, trong một `BlockedPeriod` hoặc sân đã bị xóa; **booked** nếu thuộc `Booking` ở trạng thái `Confirmed`; **held** nếu thuộc `Hold` chưa kết thúc (chưa nhả); còn lại là **available**. Việc lưu sẵn hay tính khi truy vấn là quyết định của Khôi (3.1.2).
+`derivedStatus` của `TimeSlot` được tính theo thứ tự ưu tiên: **unavailable** nếu nằm ngoài `OperatingHours`, trong một `BlockedPeriod` hoặc `Court.status` là đã xóa; **booked** nếu thuộc `Booking` ở trạng thái `Confirmed`; **held** nếu thuộc `Hold` chưa kết thúc (chưa nhả); còn lại là **available**. Việc lưu sẵn hay tính khi truy vấn là quyết định của Khôi (3.1.2). `derivedStatus` chỉ phục vụ hiển thị; quy tắc chống đặt trùng là ràng buộc riêng `DM-INV-03`, không suy ra từ `booked`.
 
 ---
 
 ## 4. Các quyết định mô hình hóa
 
-- **Lịch chung (Shared Schedule):** Lịch chung không được lưu thành một thực thể riêng. Nó là kết quả tổng hợp của `Booking`, `Hold`, `BlockedPeriod` và `OperatingHours` trên từng sân, nhờ đó một slot không thể vừa được đặt vừa bị khóa từ hai nguồn khác nhau (FR-22, BR-13). Vì vậy `TimeSlot.derivedStatus` là giá trị suy ra, không phải thuộc tính cập nhật tay.
+- **Lịch chung (Shared Schedule):** Lịch chung không được lưu thành một thực thể riêng. Nó là kết quả tổng hợp của `Booking`, `Hold`, `BlockedPeriod` và `OperatingHours` trên từng sân, nhờ đó một slot không bị chiếm từ hai nguồn khác nhau (FR-22, BR-13, `DM-INV-08`). Việc này **không thay thế** quy tắc chống đặt trùng `DM-INV-03` (một sân tại một khung giờ có tối đa một booking `Confirmed`). Vì vậy `TimeSlot.derivedStatus` là giá trị suy ra, không phải thuộc tính cập nhật tay.
 - **Cấu trúc booking và hold:** Một `Booking` (và `Hold`) thuộc đúng một cơ sở. `BookingItem` và `HoldItem` có cùng cấu trúc: mỗi item trỏ tới một sân và phủ một dãy slot 30 phút liên tiếp (quan hệ phụ thuộc `covers`, không lưu danh sách slot). Điều này thể hiện luật một đơn đặt chỉ gồm một cơ sở và không cho phép hủy lẻ từng sân (FR-09, FR-28, BR-03, BR-09).
 - **Hold và Booking:** `Hold` chỉ trở thành `Booking` khi xác nhận thành công (FR-11, FR-12), thể hiện bằng quan hệ `Hold → Booking (0..1)`. Vì vậy `Booking` bắt đầu ngay ở trạng thái `Confirmed`, không có trạng thái chờ (`Pending`).
 - **Vai trò người dùng:** Dùng một thuộc tính `role` thay vì kế thừa `Player`/`FacilityOwner`, vì PA2 chỉ phân biệt hai vai trò theo quyền, không có thuộc tính riêng cho từng vai trò .
@@ -166,7 +170,7 @@ classDiagram
 
 ## 6. Thông tin gửi kèm Review (Theo Working Agreement Mục 5.3)
 
-- **Danh sách sản phẩm:** `docs/design/domain/domain-model.md` và ảnh sơ đồ `docs/design/domain/domain-model.png` (Mã đối tượng: `DM-01`, `DM-ENT-01`..`13`, `DM-INV-01`..`06`).
+- **Danh sách sản phẩm:** `docs/design/domain/domain-model.md` và ảnh sơ đồ `docs/design/domain/domain-model.png` (Mã đối tượng: `DM-01`, `DM-ENT-01`..`13`, `DM-INV-01`..`08`).
 - **Kết quả tự kiểm tra:**
   - [x] Không trộn các lớp kỹ thuật (Controller, Service, DTO, bảng nối vật lý) vào Domain Model.
   - [x] Sơ đồ và phần chữ nhất quán: `Hold` và `Booking` đều gắn với `Facility`, đều có item riêng; `Hold` có quan hệ `becomes` tới `Booking`; vai trò chỉ biểu diễn bằng `role`.
@@ -179,5 +183,5 @@ classDiagram
   2. Tách `Booking`/`BookingItem` và `Hold`/`HoldItem` để biểu diễn một đơn nhiều sân với giờ bắt đầu và số slot liên tiếp khác nhau trên từng sân (BR-03), và để giữ cùng cấu trúc khi hold chuyển thành booking.
   3. Một thuộc tính `role` thay cho kế thừa.
 - **Điểm còn mở cần người kiểm tra xác nhận:**
-  - `@KhoiVuong2210`: đối chiếu cách ánh xạ `HoldItem`/`BookingItem` và `derivedStatus` sang bảng vật lý trong ERD (3.1.2); .
-  - `@Lysivi2005`: xác nhận ánh xạ các khái niệm `DM-ENT-01`..`13` sang lớp trong Class Diagram (3.3.2); 
+  - `@KhoiVuong2210`: đối chiếu cách ánh xạ `HoldItem`/`BookingItem` và `derivedStatus` sang bảng vật lý trong ERD (3.1.2), và cách ERD bảo đảm `DM-INV-03` (tối đa một booking `Confirmed` cho một sân tại một khung giờ) và `DM-INV-08`.
+  - `@Lysivi2005`: xác nhận ánh xạ các khái niệm `DM-ENT-01`..`13` sang lớp trong Class Diagram (3.3.2).
