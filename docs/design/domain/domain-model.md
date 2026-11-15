@@ -3,7 +3,7 @@
 - **Mã đối tượng truy vết:** `DM-01` (Sơ đồ miền tổng thể), `DM-ENT-01`..`DM-ENT-13` (Các khái niệm miền) và `DM-INV-01`..`DM-INV-08` (Ràng buộc miền)
 - **Issue liên quan:** `#17` — 3.3.1 Xây dựng domain model
 - **Người chịu trách nhiệm chính:** Nguyễn Minh Trí (`@nmt1206`)
-- **Người kiểm tra:** Khôi (`@KhoiVuong2210` — đối chiếu dữ liệu); Vĩ (`@Lysivi2005` — kiểm tra ánh xạ sang lớp).
+- **Người kiểm tra:** Khoa (`@buikhoa130406` — kiểm tra quy tắc nghiệp vụ và baseline); Vĩ (`@Lysivi2005` — kiểm tra độc lập cách mô hình nghiệp vụ khớp với thiết kế lớp, kiến trúc và ERD khi có bản dữ liệu).
 
 ---
 
@@ -183,5 +183,5 @@ classDiagram
   2. Tách `Booking`/`BookingItem` và `Hold`/`HoldItem` để biểu diễn một đơn nhiều sân với giờ bắt đầu và số slot liên tiếp khác nhau trên từng sân (BR-03), và để giữ cùng cấu trúc khi hold chuyển thành booking.
   3. Một thuộc tính `role` thay cho kế thừa.
 - **Điểm còn mở cần người kiểm tra xác nhận:**
-  - `@KhoiVuong2210`: đối chiếu cách ánh xạ `HoldItem`/`BookingItem` và `derivedStatus` sang bảng vật lý trong ERD (3.1.2), và cách ERD bảo đảm `DM-INV-03` (tối đa một booking `Confirmed` cho một sân tại một khung giờ) và `DM-INV-08`.
-  - `@Lysivi2005`: xác nhận ánh xạ các khái niệm `DM-ENT-01`..`13` sang lớp trong Class Diagram (3.3.2).
+  - Thiết kế dữ liệu (`#10` — 3.1.2, do `@nmt1206` phụ trách): dùng `DM-INV-03` và `DM-INV-08` làm đầu vào để ánh xạ `HoldItem`/`BookingItem`, `derivedStatus` và cơ chế chống đặt trùng sang bảng vật lý trong ERD.
+  - `@Lysivi2005`: kiểm tra độc lập cách mô hình nghiệp vụ khớp với thiết kế lớp (3.3.2), kiến trúc (3.1.1) và ERD (`#10`) khi có bản dữ liệu.
