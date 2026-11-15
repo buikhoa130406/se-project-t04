@@ -2,7 +2,7 @@
 
 - **Mã đối tượng truy vết:** `UI-SPEC-01` (Tổng thể), `UI-01`..`UI-15` (Danh sách màn hình), `UI-FLOW-01` (Luồng chuyển màn hình), `UI-ACC-01` (Accessibility & Responsive)
 - **Người thực hiện:** Lý Sĩ Vĩ (`@Lysivi2005`)
-- **Người kiểm tra:** Trí (`@nmt1206` — luồng & ngoại lệ), Khôi (`@KhoiVuong2210` — dữ liệu & phản hồi API)
+- **Người kiểm tra:** Trí (`@nmt1206` — đối chiếu dữ liệu `#10` & review luồng, lỗi nghiệp vụ); Vĩ (`@Lysivi2005` — phụ trách đầu mối API `#12`)
 - **Tài liệu đầu vào:** Baseline PA2 (`pa/PA2/T04-PA2-SoftwareRequirementsSpecification.docx`), Bộ mockup `docs/requirements/UI_Picture/`, State Machines (`docs/design/states/state-machines.md`)
 
 > **Lưu ý phạm vi (Baseline PA2):**
@@ -106,8 +106,8 @@ flowchart TD
 |---|---|---|---|
 | Đồng hồ đếm ngược 05:00 | Timer Badge | `onTick` (1s) | Hiển thị thời gian giữ còn lại dựa trên `expiresAt` của server. **Bảo toàn lượt giữ khi tải lại trang (F5):** Hold được lưu cố định trên DB (không giữ bằng state tạm ở trình duyệt) và giao diện không gửi yêu cầu nhả khi reload; sau khi F5, trang tự gọi API lấy Hold đang hoạt động (`getActiveHold` trả `expiresAt`, `serverNow`) để khôi phục `UI-07` và đếm ngược tiếp đúng thời gian còn lại, không reset 5 phút (`FR-25`, `AC-22`, `SEQ-02B`). Không tự gia hạn (`FR-31`). |
 | Nút *Xác nhận đặt sân* | Primary Button | `onClick` | Gọi API kiểm tra lại (Recheck) quyền sở hữu Hold, `now < expiresAt` và tình trạng sân. Nếu hợp lệ $\rightarrow$ **tự động xác nhận đơn** (không chờ chủ sân duyệt, FR-12) và chuyển `UI-08`. Nếu hết hạn tại thời điểm bấm $\rightarrow$ từ chối ngay (`AC-35`, `AC-39`). |
-| Nút *Hủy / Chọn lại giờ* | Secondary Button | `onClick` | Khóa tạm nút và hiển thị trạng thái *"Đang giải phóng chỗ..."* trong khi gửi API nhả Hold (`releaseHold`). **Chỉ chuyển về `UI-06` sau khi máy chủ xác nhận Hold đã chuyển sang `RELEASED`**. Nếu máy chủ báo lỗi (nhả thất bại), giữ người dùng lại trên màn hình và hiển thị lỗi kèm trạng thái thực tế của Hold để người dùng không thao tác như thể chỗ đã được giải phóng (`FR-14`, `AC-20`, `AC-21`). |
-| Đóng tab / Mất kết nối | Session / Expiry Fallback | `N/A` (không nhả khi reload) | **Không** gửi yêu cầu nhả Hold từ `beforeunload` / `pagehide` vì trình duyệt kích hoạt các sự kiện này cả khi F5, dễ làm mất giữ chỗ trái `FR-25`. Nếu có cơ chế phát hiện rời luồng tách biệt với F5 (như điều hướng nội bộ trong SPA), hệ thống gửi yêu cầu nhả sớm; còn khi đóng tab hoặc mất kết nối đột ngột không phân biệt được, hệ thống dựa vào **cơ chế hết hạn 5 phút** (`Hold Expiry Worker`) để tự động giải phóng sau `expiresAt` (`FR-26`, `AC-23`, `SEQ-02B`). |
+| Nút *Hủy / Chọn lại giờ* | Secondary Button | `onClick` | Khóa tạm nút và hiển thị trạng thái *"Đang giải phóng chỗ..."* trong khi gửi API nhả Hold (`releaseHold`, đồng bộ `SEQ-02B` / `STM-01` & API `#12`). Nếu nhận trạng thái `Releasing` $\rightarrow$ tiếp tục chờ; nếu nhận `ReleaseFailed` $\rightarrow$ báo lỗi kèm trạng thái thực tế và giữ nguyên màn hình để người dùng không thao tác như thể chỗ đã được giải phóng; **chỉ cho phép quay về `UI-06` để chọn lại khi nhận `Released`** (`FR-14`, `AC-20`, `AC-21`). |
+| Đóng tab / Mất kết nối | Session / Expiry Fallback | `N/A` (không nhả khi reload) | **Không** gửi yêu cầu nhả Hold từ `beforeunload` / `pagehide` vì trình duyệt kích hoạt các sự kiện này cả khi F5, dễ làm mất giữ chỗ trái `FR-25`. Với `FR-26`, phần phát hiện sớm khi đóng tab hoặc mất kết nối (ngoài điều hướng nội bộ SPA) **còn cần thống nhất**; khi việc phát hiện sớm không thành công hoặc không phân biệt được với F5, hệ thống dựa vào **cơ chế hết hạn 5 phút** (`ReleaseJob` / hết hạn sau `expiresAt`) để tự động giải phóng chỗ (`FR-26`, `AC-23`, `SEQ-02B`). |
 
 ---
 
@@ -163,5 +163,5 @@ flowchart TD
   - [x] Khớp các điểm đồng bộ với `STM-01` (phân biệt `ACTIVE`, `EXPIRED`, `RELEASED` trên `UI-07`) và `STM-03` (suy diễn nhãn `Đã hoàn thành` trên `UI-09`).
   - [x] Giữ đúng baseline PA2: không đưa thanh toán trực tuyến hay thông báo Email/SMS vào luồng chính.
 - **Điểm cần người kiểm tra xác nhận:**
-  - `@nmt1206`: xác nhận luồng ngoại lệ trên `UI-06`, `UI-07`, `UI-10`, `UI-14` và nhãn trạng thái trên `UI-07`, `UI-09` đã khớp `STM-01`/`STM-03` và `SEQ-01..05`.
-  - `@KhoiVuong2210`: xác nhận các thông tin phản hồi API (khung lỗi khi All-or-Nothing thất bại, `expiresAt` khi F5, danh sách đơn bị ảnh hưởng ở bước preview 24h) khớp đặc tả giao tiếp (`3.1.4`).
+  - `@nmt1206` (Trí — đối chiếu dữ liệu `#10` & review luồng, lỗi nghiệp vụ): xác nhận luồng ngoại lệ trên `UI-06`, `UI-07` (`Releasing` / `ReleaseFailed` / `Released`), `UI-10`, `UI-14` và nhãn trạng thái trên `UI-07`, `UI-09` đã khớp `STM-01`/`STM-03` và `SEQ-01..05`.
+  - `@Lysivi2005` (Vĩ — đầu mối API `#12`): đối chiếu và đồng bộ phản hồi API (`getActiveHold` trả `expiresAt`/`serverNow`, `releaseHold` trả `Releasing`/`ReleaseFailed`/`Released`, danh sách đơn bị ảnh hưởng ở bước preview 24h) trong đặc tả giao tiếp (`#12` / `3.1.4`).
