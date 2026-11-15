@@ -9,7 +9,7 @@
 
 Ba đối tượng có hành vi phụ thuộc vào trạng thái: `Hold`, `TimeSlot` và `Booking`. Mỗi đối tượng được thể hiện bằng sơ đồ trạng thái kèm bảng chuyển trạng thái và luật kích hoạt. Các chuyển trạng thái khớp với sơ đồ tuần tự: `STM-01` với `SEQ-01`, `SEQ-02`, `SEQ-02B`; `STM-03` với `SEQ-02`, `SEQ-03`, `SEQ-04`.
 
-Các đối tượng khác không có state machine: `User` (baseline không có kích hoạt hay khóa tài khoản), `Notification` (không có trạng thái đã đọc, ), `BlockedPeriod` (không có thao tác gỡ hay sửa, ).
+Các đối tượng khác không có state machine: `User` (baseline không có kích hoạt hay khóa tài khoản), `Notification` (không có trạng thái đã đọc), `BlockedPeriod` (không có thao tác gỡ hay sửa).
 
 ---
 
@@ -18,7 +18,6 @@ Các đối tượng khác không có state machine: `User` (baseline không có
 - **Truy vết:** FR-09, FR-10, FR-11, FR-13, FR-14, FR-23, FR-25, FR-26, FR-27, FR-31, NFR-02, NFR-03, BR-01..08, AC-12, AC-15..25, AC-35..39.
 
 Bốn trạng thái: `Active` (đang giữ), `Confirmed` (đã thành booking), `Released` (đã nhả slot), `Expired` (đã quá 5 phút nhưng slot **chưa** nhả xong). Khi ở `Expired`, mọi yêu cầu xác nhận bị từ chối và slot vẫn tính là `Held` cho tới khi hold sang `Released`.
-
 
 *Hình 4.5.1 — Sơ đồ trạng thái của Hold (`STM-01`)*
 
@@ -45,7 +44,9 @@ stateDiagram-v2
 | `Active` | Đóng tab hoặc mất kết nối | Hệ thống phát hiện sớm; nếu không thì chờ hết hạn 5 phút (FR-26) | `Released` | FR-26, AC-23 |
 | `Active` | Quá 5 phút | `now >= expiresAt`; mọi yêu cầu xác nhận bị từ chối ngay, khóa nút xác nhận | `Expired` | FR-14, NFR-03, AC-20, AC-35, AC-39 |
 | `Expired` | Tác vụ nhả chạy | Hoàn tất giải phóng slot trong 5 giây kể từ khi hết hạn | `Released` | FR-14, NFR-03, AC-20 |
-| `Expired` | Nhả thất bại | Báo lỗi cho người dùng và không cho tiếp tục như thể đã nhả (FR-14); tác vụ nhả thử lại ở chu kỳ sau | `Expired` | FR-14, AC-20 |
+| `Expired` | Nhả thất bại | Tác vụ nhả báo lỗi, hoặc quá 5 giây sau `expiresAt` mà hold vẫn chưa `Released`. Chỉ khi đó mới báo lỗi cho người dùng và không cho tiếp tục như thể đã nhả (FR-14); tác vụ nhả thử lại ở chu kỳ sau | `Expired` | FR-14, AC-20 |
+
+**Ba kết quả mà giao diện và API phải thể hiện khi hold đã hết hạn** (FR-14, AC-20): `Releasing` (`Expired`, đang giải phóng: thông báo hết hạn, tạm khóa xác nhận, chưa cho chọn lại, không báo lỗi), `ReleaseFailed` (`Expired`, nhả lỗi hoặc quá 5 giây: báo lỗi, không cho tiếp tục), `Released` (nhả thành công: mới cho chọn lại). Đây là hai kết quả khác nhau của cùng một trạng thái `Expired`, không phải trạng thái lưu thêm.
 
 **Chuyển trạng thái không hợp lệ** (bị từ chối, dữ liệu không đổi): `confirmBooking` khi hold đang `Expired`, `Released` hoặc `Confirmed` (AC-35, AC-39); `confirmBooking` hold của người khác (AC-36); gia hạn hold ở bất kỳ trạng thái nào (FR-31); đưa hold từ `Released` hoặc `Expired` quay lại `Active`.
 
@@ -59,7 +60,6 @@ stateDiagram-v2
 
 Trạng thái của `TimeSlot` là giá trị **suy ra** từ lịch chung (xem `DM-INV` ở domain model), không phải dữ liệu cập nhật tay. Sơ đồ mô tả các chuyển trạng thái mà người dùng nhìn thấy (FR-08).
 
-
 *Hình 4.5.2 — Sơ đồ trạng thái của TimeSlot (`STM-02`)*
 
 ```mermaid
@@ -72,7 +72,8 @@ stateDiagram-v2
     Booked --> Available : owner hủy toàn bộ đơn, slot nằm ngoài phần bị thay đổi
     Booked --> Unavailable : owner khóa slot / đổi giờ / xóa sân (slot bị ảnh hưởng)
     Available --> Unavailable : owner khóa slot (trước >= 24h) / đổi giờ hoặc xóa sân
-    Unavailable --> Available : owner mở rộng giờ mở cửa
+    Unavailable --> Available : owner mở rộng giờ mở cửa và slot không còn lý do nào khác (không còn trong BlockedPeriod, sân còn hoạt động)
+    Unavailable --> Unavailable : owner mở rộng giờ mở cửa nhưng slot vẫn nằm trong BlockedPeriod
 ```
 
 | Từ | Sự kiện | Điều kiện | Đến | Truy vết |
@@ -85,12 +86,14 @@ stateDiagram-v2
 | `Booked` | Chủ sân khóa slot, đổi giờ mở cửa hoặc xóa sân, với slot **bị ảnh hưởng** | Như trên | `Unavailable` | FR-29, BR-11, AC-28 |
 | `Available` | Chủ sân khóa slot (`BlockedPeriod`) | Khoảng khóa bắt đầu sau ít nhất 24 giờ (FR-20, BR-12) và không vướng hold đang hoạt động | `Unavailable` | FR-20, FR-29, BR-12, AC-30, AC-31 |
 | `Available` | Chủ sân đổi giờ hoạt động hoặc xóa sân | Không vướng hold đang hoạt động và không có booking nào bị ảnh hưởng bắt đầu trong dưới 24 giờ (FR-18, FR-29, BR-11) | `Unavailable` | FR-17, FR-18, FR-29, BR-11, AC-29, AC-30 |
-| `Unavailable` | Chủ sân mở rộng giờ mở cửa | Slot nằm trong giờ hoạt động mới và sân còn hoạt động | `Available` | FR-18, FR-22 |
+| `Unavailable` | Chủ sân mở rộng giờ mở cửa | Trạng thái được **tính lại theo lịch chung**: slot nằm trong giờ hoạt động mới, **không còn nằm trong `BlockedPeriod` nào** và sân còn hoạt động | `Available` | FR-18, FR-20, FR-22 |
+| `Unavailable` | Chủ sân mở rộng giờ mở cửa | Slot vẫn nằm trong một `BlockedPeriod` (hoặc sân đã xóa); lý do không khả dụng chưa hết | `Unavailable` | FR-18, FR-20, FR-22 |
 
 **Quy tắc kèm theo:**
 
 - Không có chuyển `Held → Unavailable`: chủ sân phải chờ hold kết thúc rồi thử lại (FR-29, AC-30).
-- Baseline không có thao tác gỡ khóa `BlockedPeriod` , nên slot bị khóa chỉ khả dụng lại khi giờ hoạt động được mở rộng.
+- Một slot `Unavailable` có thể do ba lý do độc lập: nằm ngoài giờ hoạt động, nằm trong `BlockedPeriod`, hoặc sân đã bị xóa. Slot chỉ về `Available` khi **không còn lý do nào**, tức khi trạng thái tính lại theo lịch chung không còn lý do nào.
+- Baseline không có thao tác gỡ khóa `BlockedPeriod`. Vì vậy mở rộng giờ hoạt động chỉ làm khả dụng lại các slot bị `Unavailable` do ngoài giờ; slot đang nằm trong `BlockedPeriod` vẫn giữ `Unavailable`.
 - Slot `Held`, `Booked`, `Unavailable` không chọn được.
 
 ---
@@ -98,6 +101,7 @@ stateDiagram-v2
 ## 3. `STM-03`: Booking
 
 - **Truy vết:** FR-11, FR-12, FR-15, FR-16, FR-21, FR-28, FR-29, FR-30, BR-06, BR-09, BR-11, AC-19, AC-25..29, AC-32, AC-33.
+
 
 *Hình 4.5.3 — Sơ đồ trạng thái của Booking (`STM-03`)*
 
@@ -132,8 +136,9 @@ stateDiagram-v2
 | :--- | :--- | :--- |
 | `@KhoiVuong2210` (3.1.2) | `Hold.status` có 4 giá trị (`Active`, `Confirmed`, `Released`, `Expired`) cùng `expiresAt`; truy vấn tìm hold hết hạn cần nhanh (index theo trạng thái và `expiresAt`) | `STM-01`, ASR-G2 |
 | `@KhoiVuong2210` | `Booking.status` có 3 giá trị; không xóa vật lý booking đã hủy để giữ lịch sử (FR-16) | `STM-03` |
+| `@KhoiVuong2210` | Với hold `Expired`, cần phân biệt `Releasing` và `ReleaseFailed` (ghi nhận nhả lỗi, hoặc tính từ `expiresAt` quá 5 giây mà chưa `Released`) để API trả đúng kết quả cho giao diện | `STM-01`, `SEQ-02B`, FR-14 |
 | `@KhoiVuong2210` | Chuyển trạng thái phải nguyên tử: xác nhận và nhả hết hạn không thể cùng thắng; hủy booking, ghi thay đổi lịch và tạo thông báo trong một transaction | `STM-01`, `STM-03`, `SEQ-04` |
-| `@Lysivi2005` (3.3.2, 3.2.1) | `Hold`, `Booking` có thao tác chuyển trạng thái kiểm tra điều kiện; trạng thái `TimeSlot` là kết quả truy vấn; UI phân biệt `Active` (đếm ngược, Confirm bật), `Expired` (Confirm tắt, đang nhả, báo lỗi nếu nhả thất bại) và `Released` (cho chọn lại) | `STM-01`, `STM-02` |
+| `@Lysivi2005` (3.3.2, 3.2.1) | `Hold`, `Booking` có thao tác chuyển trạng thái kiểm tra điều kiện; trạng thái `TimeSlot` là kết quả truy vấn; UI phân biệt `Active` (đếm ngược, Confirm bật), `Expired` với kết quả `Releasing` (thông báo hết hạn, Confirm tắt, chưa cho chọn lại, không báo lỗi) hoặc `ReleaseFailed` (báo lỗi giải phóng, không cho tiếp tục) và `Released` (cho chọn lại) | `STM-01`, `STM-02` |
 
 ---
 
@@ -160,7 +165,7 @@ stateDiagram-v2
   - [x] Mỗi mũi tên trong 3 sơ đồ có một dòng trong bảng chuyển trạng thái, kèm truy vết PA2.
   - [x] Đã tách rõ điều kiện 24 giờ của `TimeSlot` (`Available -> Unavailable`): chỉ áp BR-12 (khoảng khóa trước 24h) cho `BlockedPeriod`, còn đổi giờ mở cửa/xóa sân chỉ xét FR-29 (booking bị ảnh hưởng bắt đầu >= 24h).
   - [x] Đã tách rõ `Booked -> Available` (người chơi hủy; chủ sân hủy đơn với slot ngoài phần bị thay đổi) và `Booked -> Unavailable` (slot bị ảnh hưởng).
-  - [x] Đã bỏ chuyển "gỡ khóa" (không có trong baseline); `Unavailable -> Available` chỉ qua mở rộng giờ hoạt động.
+  - [x] Đã bỏ chuyển "gỡ khóa" (không có trong baseline); `Unavailable -> Available` chỉ khi mở rộng giờ hoạt động **và** slot không còn nằm trong `BlockedPeriod` (trạng thái tính lại theo lịch chung); nếu vẫn bị chặn thì giữ `Unavailable`.
   - [x] Tập giá trị `Hold.status` nhất quán giữa sơ đồ và phần review (4 giá trị).
   - [x] Khớp với sơ đồ tuần tự: `STM-01` với `SEQ-01`, `SEQ-02`, `SEQ-02B`; `STM-03` với `SEQ-02`, `SEQ-03`, `SEQ-04`.
   - [x] Đã mở khối Mermaid trên preview GitHub và không có lỗi cú pháp; đã xuất lại ảnh `stm-*.png`.
