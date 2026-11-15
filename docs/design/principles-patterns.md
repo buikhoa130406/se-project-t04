@@ -72,7 +72,7 @@
 ### 2.2. [`PAT-02`] Repository Pattern (Mẫu Kho lưu trữ dữ liệu)
 - **Vấn đề cần giải quyết:** Tách biệt logic nghiệp vụ phức tạp (kiểm tra liên tiếp 30 phút, tính mốc 3h/24h, xử lý hủy đơn hàng loạt) khỏi các thao tác truy vấn PostgreSQL và quản lý Transaction.
 - **Cách áp dụng & Bằng chứng:** Định nghĩa các Repository (`BookingRepository`, `HoldRepository`, `ScheduleRepository`, `FacilityRepository`) trong `architecture-design.md` (`C4-CMP`) và làm thuộc tính phụ thuộc của các Service trong `class-design.md` (`CLS-08`).
-- **Lý do chọn & Đánh đổi (Trade-off):** Giúp cô lập tầng dữ liệu để kiểm thử độc lập và gom toàn bộ câu lệnh khóa dòng (`SELECT ... FOR UPDATE`) hoặc truy vấn suy diễn `derivedStatus` về một nơi duy nhất, dù phải viết thêm lớp interface trung gian.
+- **Lý do chọn & Đánh đổi (Trade-off):** Giúp cô lập tầng dữ liệu để kiểm thử độc lập và gom toàn bộ câu lệnh kiểm soát tranh chấp (khóa dòng hoặc ràng buộc duy nhất sau khi chốt ở `#10`) và truy vấn suy diễn `derivedStatus` về một nơi duy nhất, dù phải viết thêm lớp interface trung gian.
 
 ---
 
@@ -83,21 +83,21 @@
 
 ---
 
-### 2.4. [`PAT-04`] Atomic Transaction & Pessimistic Locking / Unit of Work
+### 2.4. [`PAT-04`] Atomic Transaction & Concurrency Control *(Locking / Unique Constraint đang chờ `#10` & `ADR-002`)*
 - **Vấn đề cần giải quyết:** Ngăn chặn điều kiện tranh chấp (*race condition*) khi nhiều người cùng bấm *Tiến hành đặt sân* cho cùng một khung giờ (`FR-13`, `NFR-02`), đảm bảo quy tắc *All-or-Nothing* (`BR-05`, `ADR-002`) và đảm bảo việc chủ sân hủy đơn + tạo thông báo In-app xảy ra đồng bộ (`FR-29`, `FR-30`).
-- **Cách áp dụng & Bằng chứng:**
-  - Trong `architecture-design.md` (`ARC-MAP`), `class-design.md` (`CLS-08`) và `sequence-diagrams.md` (`SEQ-01`, `SEQ-02`, `SEQ-04`): Toàn bộ thao tác của `createHold`, `confirmBooking`, `createScheduleBlock` được bọc trong một **PostgreSQL ACID Transaction** tại tầng Repository.
-  - Khi tạo Hold hoặc xác nhận, giao dịch khóa các dòng liên quan (hoặc dựa vào ràng buộc duy nhất theo sân/giờ của lịch chung) nên tại một thời điểm chỉ **duy nhất 1 yêu cầu** giữ chỗ thành công; nếu có lỗi bất kỳ bước nào, toàn bộ giao dịch được rollback.
-- **Lý do chọn & Đánh đổi (Trade-off):** Khóa bi quan / Transaction ACID ở DB đánh đổi một phần nhỏ thông lượng ghi đồng thời nhưng đây là lựa chọn an toàn nhất để bảo đảm tuyệt đối **0 đơn trùng** (`NFR-02`) với quy mô 50 người dùng đồng thời (`NFR-06`).
+- **Phần đã thống nhất & Bằng chứng (`ADR-002`, `3.1.1`, `3.3.2`, `3.3.3`):** Toàn bộ thao tác kiểm tra xung đột và ghi dữ liệu của `createHold`, `confirmBooking`, `applyScheduleChange` bắt buộc thực thi trọn vẹn trong **1 PostgreSQL ACID Transaction (*All-or-Nothing*)** tại tầng Repository (`CLS-08`, `SEQ-01`, `SEQ-02`, `SEQ-04`). Nếu bất kỳ khung giờ nào lỗi hoặc có xung đột, toàn bộ giao dịch được rollback và giữ 0 khung.
+- **Phần đang chờ xác nhận chi tiết (`Pending #10 / ADR-002`):** Cơ chế chống đặt trùng cụ thể ở tầng cơ sở dữ liệu — lựa chọn giữa **khóa bi quan theo dòng (`SELECT ... FOR UPDATE`)** hoặc **ràng buộc duy nhất (`UNIQUE / Exclusion Constraint`) theo `(court_id, slot_start)`** — hiện đang chờ Khôi (`@KhoiVuong2210`) chốt phương án cuối trong thiết kế dữ liệu `#10` và cập nhật trạng thái `ADR-002`. Sau khi `#10` chốt, tài liệu sẽ dẫn chiếu trực tiếp đến tên ràng buộc/thao tác cụ thể trong `docs/design/data/`.
+- **Đánh đổi (Trade-off):** Dùng giao dịch ACID trực tiếp tại PostgreSQL đánh đổi một phần nhỏ thông lượng ghi đồng thời nhưng ưu tiên cao nhất tính đúng đắn **0 đơn trùng** (`NFR-02`) ở quy mô 50 người dùng đồng thời (`NFR-06`).
 
 ---
 
 ### 2.5. [`PAT-05`] Hybrid Expiry Pattern (Lazy Check + Background Polling Worker)
-- **Vấn đề cần giải quyết:** Lượt giữ chỗ chỉ kéo dài tối đa 5 phút, **không tự gia hạn khi tải lại trang (F5)** (`FR-25`), phải từ chối xác nhận ngay tại mốc hết hạn và hoàn tất nhả chỗ trong **tối đa 5 giây** (`FR-14`, `FR-26`, `NFR-03`, `ASR-G2`).
+- **Vấn đề cần giải quyết:** Lượt giữ chỗ chỉ kéo dài tối đa 5 phút, **không tự gia hạn khi tải lại trang (F5)** (`FR-25`), phải từ chối xác nhận ngay tại mốc hết hạn và hướng tới hoàn tất nhả chỗ trong **mục tiêu tối đa 5 giây** (`FR-14`, `FR-26`, `NFR-03`, `ASR-G2`).
 - **Cách áp dụng & Bằng chứng:**
   - **Lưu mốc cố định & Lazy Check:** `SlotHold` lưu `expiresAt = createdAt + 5 phút` trên DB (`CLS-04`). Khi F5, Frontend lấy lại `remainingSeconds(now)` từ API (`UI-07`). Khi người chơi bấm *Xác nhận*, `SlotHold.isExpired(now)` kiểm tra tức thì `now >= expiresAt` để từ chối xác nhận ngay tại giây hết hạn mà không phụ thuộc worker đã chạy kịp hay chưa (`STM-01`).
-  - **Background Polling Worker (`ReleaseJob`):** `Hold Expiry Worker` (`3.1.1` `C4-CNT`) gọi `BookingService.releaseExpiredHolds(now)` theo chu kỳ $\le 1$ giây để chuyển các `SlotHold` quá hạn sang `RELEASED` và mở trống lại trên lịch chung trong $\le 5$ giây (`SEQ-02B`).
-- **Lý do chọn & Đánh đổi (Trade-off):** Tránh phải dựng thêm Redis TTL hay hệ thống hàng đợi tin nhắn (RabbitMQ/BullMQ) nằm ngoài stack chuẩn PA2 (`CON-01`), vừa giữ hạ tầng triển khai gọn trên Cloud Linux vừa đảm bảo đúng SLA $\le 5$ giây của `NFR-03`.
+  - **Background Polling Worker (`ReleaseJob`):** `Hold Expiry Worker` (`3.1.1` `C4-CNT`/`C4-CMP`) gọi `BookingService.releaseExpiredHolds(now)` theo tham số thiết kế chu kỳ $\le 1$ giây để chuyển các `SlotHold` quá hạn sang `RELEASED` (nếu lỗi giữ nguyên `EXPIRED` và thử lại ở chu kỳ sau, `SEQ-02B`).
+- **Mục tiêu `NFR-03` & Cách đo kiểm chứng:** Mốc **$\le 5$ giây** là **mục tiêu hiệu năng của `NFR-03` cần đo kiểm**, được xác định từ thời điểm `expiresAt` đến khi transaction giải phóng trên PostgreSQL hoàn tất ghi `RELEASED` và truy vấn lịch chung mở lại slot về trạng thái `AVAILABLE` (bao gồm cả thời gian trễ quét + xử lý + ghi DB). Kết quả thử nghiệm kết nối **`#7` (`2.3.1`)** chỉ làm bằng chứng cho phạm vi kết nối/kịch bản mà bài thử đó thực sự đo được, không tự suy rộng sang `NFR-03` nếu chưa chạy benchmark hết hạn/tranh chấp riêng.
+- **Lý do chọn & Đánh đổi (Trade-off):** Tránh phải dựng thêm Redis TTL hay hệ thống hàng đợi tin nhắn (RabbitMQ/BullMQ) nằm ngoài stack chuẩn PA2 (`CON-01`), giữ hạ tầng gọn trên Cloud Linux và dễ kiểm thử.
 
 ---
 
@@ -113,8 +113,8 @@
 | `PAT-01` | Modular Monolith & Layered Architecture | `architecture-design.md` (`ARC-01`, `C4-CNT`, `C4-CMP`), `ADR-001` | CON-01, CON-03, CON-04, NFR-06 |
 | `PAT-02` | Repository Pattern | `architecture-design.md` (`C4-CMP`), `class-design.md` (`CLS-08`) | Tách SQL khỏi nghiệp vụ, dễ test |
 | `PAT-03` | State-driven Lifecycle | `HoldStatus`, `BookingStatus`, `UI-06`, `UI-07`, `UI-09`, `UI-10`, `STM-01`..`03` | FR-14, FR-15, FR-16, FR-28, BR-09 |
-| `PAT-04` | Atomic Transaction & Pessimistic Locking | `BookingService.createHold/confirm`, `OwnerScheduleService`, `ADR-002` | FR-13, FR-29, NFR-02, BR-05 |
-| `PAT-05` | Hybrid Expiry (Lazy Check + Worker) | `Hold Expiry Worker` (`3.1.1`), `SlotHold.isExpired` (`CLS-04`), `SEQ-02B` | FR-14, FR-25, FR-26, NFR-03 |
+| `PAT-04` | Atomic Transaction & Concurrency Control *(chốt Transaction; Lock/Unique chờ `#10`)* | `BookingService.createHold/confirm`, `OwnerScheduleService`, `ADR-002` | FR-13, FR-29, NFR-02, BR-05 |
+| `PAT-05` | Hybrid Expiry (Lazy Check + Worker — *mục tiêu `NFR-03` cần đo*) | `Hold Expiry Worker` (`3.1.1`), `SlotHold.isExpired` (`CLS-04`), `SEQ-02B` | FR-14, FR-25, FR-26, NFR-03 |
 
 ---
 
