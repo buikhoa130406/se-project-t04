@@ -1,0 +1,320 @@
+# Từ điển dữ liệu (Task 3.1.2)
+
+- **Mã đối tượng truy vết:** `DB-TBL-01`..`DB-TBL-12` (mỗi bảng một mã, theo thứ tự trong file), `DB-CON-xx` (ràng buộc, xem `README.md`)
+- **Issue liên quan:** `#10` — 3.1.2 Thiết kế dữ liệu và ràng buộc lịch đặt sân
+- **Người chịu trách nhiệm chính:** Nguyễn Minh Trí (`@nmt1206`, tiếp nhận tạm thời từ 15/11/2026)
+- **Nguồn DDL:** `schema.sql` (PostgreSQL 16). Bảng dưới được sinh trực tiếp từ cơ sở dữ liệu đã nạp `schema.sql`, nên kiểu, NULL, mặc định, ràng buộc và chỉ mục khớp với DDL.
+
+Quy ước: `PK` khóa chính, `FK` khóa ngoại, `UQ` duy nhất, `CK` ràng buộc CHECK, `EX` ràng buộc loại trừ (exclusion). Thời điểm dùng `timestamptz` (UTC); ngày và giờ mở cửa tính theo Asia/Ho_Chi_Minh ở tầng ứng dụng.
+
+
+## DB-TBL-01: `app_user`
+
+Tài khoản đăng nhập; mỗi tài khoản một vai trò (DB-ASM-05).
+
+- **Khái niệm miền:** DM-ENT-01  
+- **Truy vết PA2:** FR-01, FR-24, NFR-05
+
+| Cột | Kiểu | NULL | Mặc định | Khóa | Mô tả |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `id` | `bigint` | NOT NULL | `identity` | PK | Khóa chính. |
+| `name` | `text` | NOT NULL |  |  | Tên hiển thị, không rỗng. |
+| `contact` | `text` | NOT NULL |  | UQ | Số điện thoại hoặc email dùng đăng nhập; duy nhất. |
+| `password_hash` | `text` | NOT NULL |  |  | Mật khẩu đã băm; không bao giờ lưu plaintext (NFR-05). |
+| `role` | `user_role` | NOT NULL |  |  | Vai trò duy nhất của tài khoản: PLAYER hoặc FACILITY_OWNER. |
+| `created_at` | `timestamp with time zone` | NOT NULL | `now()` |  | Thời điểm tạo tài khoản. |
+
+**Ràng buộc:**
+
+- `app_user_pkey` (PK): `PRIMARY KEY (id)`
+- `app_user_contact_key` (UQ): `UNIQUE (contact)`
+- `app_user_name_check` (CK): `CHECK ((length(btrim(name)) > 0))`
+
+## DB-TBL-02: `sport`
+
+Môn thể thao; mỗi cơ sở hỗ trợ đúng một môn (DB-ASM-06).
+
+- **Khái niệm miền:** DM-ENT-04  
+- **Truy vết PA2:** FR-04
+
+| Cột | Kiểu | NULL | Mặc định | Khóa | Mô tả |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `id` | `bigint` | NOT NULL | `identity` | PK | Khóa chính. |
+| `name` | `text` | NOT NULL |  | UQ | Tên môn, duy nhất. |
+
+**Ràng buộc:**
+
+- `sport_pkey` (PK): `PRIMARY KEY (id)`
+- `sport_name_key` (UQ): `UNIQUE (name)`
+
+## DB-TBL-03: `amenity`
+
+Tiện ích dùng để lọc cơ sở.
+
+- **Khái niệm miền:** DM-ENT-04  
+- **Truy vết PA2:** FR-05
+
+| Cột | Kiểu | NULL | Mặc định | Khóa | Mô tả |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `id` | `bigint` | NOT NULL | `identity` | PK | Khóa chính. |
+| `name` | `text` | NOT NULL |  | UQ | Tên tiện ích, duy nhất. |
+
+**Ràng buộc:**
+
+- `amenity_pkey` (PK): `PRIMARY KEY (id)`
+- `amenity_name_key` (UQ): `UNIQUE (name)`
+
+## DB-TBL-04: `facility`
+
+Cơ sở/chi nhánh thuộc một chủ sân; mỗi chi nhánh là một dòng.
+
+- **Khái niệm miền:** DM-ENT-02  
+- **Truy vết PA2:** FR-03, FR-04, FR-17, BR-10
+
+| Cột | Kiểu | NULL | Mặc định | Khóa | Mô tả |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `id` | `bigint` | NOT NULL | `identity` | PK | Khóa chính. |
+| `owner_id` | `bigint` | NOT NULL |  | FK→app_user | Chủ sân sở hữu cơ sở (BR-10). Vai trò FACILITY_OWNER do dịch vụ kiểm tra. |
+| `sport_id` | `bigint` | NOT NULL |  | FK→sport | Môn thể thao của cơ sở. |
+| `name` | `text` | NOT NULL |  |  | Tên cơ sở, không rỗng. |
+| `address` | `text` | NOT NULL |  |  | Địa chỉ đầy đủ. |
+| `district` | `text` | NOT NULL |  |  | Khu vực/quận dùng để lọc theo vị trí (FR-04); chủ sân nhập khi tạo cơ sở. |
+| `description` | `text` | NULL |  |  | Mô tả tự do. |
+| `created_at` | `timestamp with time zone` | NOT NULL | `now()` |  | Thời điểm tạo cơ sở. |
+
+**Ràng buộc:**
+
+- `facility_pkey` (PK): `PRIMARY KEY (id)`
+- `facility_owner_id_fkey` (FK): `FOREIGN KEY (owner_id) REFERENCES app_user(id) ON DELETE RESTRICT`
+- `facility_sport_id_fkey` (FK): `FOREIGN KEY (sport_id) REFERENCES sport(id) ON DELETE RESTRICT`
+- `facility_name_check` (CK): `CHECK ((length(btrim(name)) > 0))`
+
+**Chỉ mục (ngoài các chỉ mục do ràng buộc tạo ra):**
+
+- `facility_owner_idx`: `INDEX facility_owner_idx ... facility USING btree (owner_id)`
+- `facility_sport_area_idx`: `INDEX facility_sport_area_idx ... facility USING btree (sport_id, district)`
+
+## DB-TBL-05: `facility_amenity`
+
+Bảng nối cơ sở – tiện ích (quan hệ nhiều-nhiều).
+
+- **Khái niệm miền:** DM-ENT-04  
+- **Truy vết PA2:** FR-05
+
+| Cột | Kiểu | NULL | Mặc định | Khóa | Mô tả |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `facility_id` | `bigint` | NOT NULL |  | PK, FK→facility | Cơ sở (khóa ngoại, xóa cơ sở thì xóa dòng nối). |
+| `amenity_id` | `bigint` | NOT NULL |  | PK, FK→amenity | Tiện ích (khóa ngoại). |
+
+**Ràng buộc:**
+
+- `facility_amenity_pkey` (PK): `PRIMARY KEY (facility_id, amenity_id)`
+- `facility_amenity_amenity_id_fkey` (FK): `FOREIGN KEY (amenity_id) REFERENCES amenity(id) ON DELETE RESTRICT`
+- `facility_amenity_facility_id_fkey` (FK): `FOREIGN KEY (facility_id) REFERENCES facility(id) ON DELETE CASCADE`
+
+**Chỉ mục (ngoài các chỉ mục do ràng buộc tạo ra):**
+
+- `facility_amenity_rev_idx`: `INDEX facility_amenity_rev_idx ... facility_amenity USING btree (amenity_id, facility_id)`
+
+## DB-TBL-06: `operating_hours`
+
+Giờ mở/đóng cửa của cơ sở theo thứ trong tuần; một khoảng mỗi ngày, không qua đêm (DB-ASM-10).
+
+- **Khái niệm miền:** DM-ENT-05  
+- **Truy vết PA2:** FR-18
+
+| Cột | Kiểu | NULL | Mặc định | Khóa | Mô tả |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `facility_id` | `bigint` | NOT NULL |  | PK, FK→facility | Cơ sở. |
+| `day_of_week` | `smallint` | NOT NULL |  | PK | Thứ trong tuần theo ISO: 1 = thứ Hai … 7 = Chủ nhật. Không có dòng = đóng cửa cả ngày. |
+| `open_time` | `time without time zone` | NOT NULL |  |  | Giờ mở cửa (giờ địa phương Asia/Ho_Chi_Minh). |
+| `close_time` | `time without time zone` | NOT NULL |  |  | Giờ đóng cửa, phải sau giờ mở (không hỗ trợ qua đêm). |
+
+**Ràng buộc:**
+
+- `operating_hours_pkey` (PK): `PRIMARY KEY (facility_id, day_of_week)`
+- `operating_hours_facility_id_fkey` (FK): `FOREIGN KEY (facility_id) REFERENCES facility(id) ON DELETE CASCADE`
+- `operating_hours_check` (CK): `CHECK ((close_time > open_time))`
+- `operating_hours_day_of_week_check` (CK): `CHECK (((day_of_week >= 1) AND (day_of_week <= 7)))`
+
+## DB-TBL-07: `court`
+
+Sân con trong cơ sở. Xóa mềm (`status`) để giữ lịch sử booking (DB-ASM-11).
+
+- **Khái niệm miền:** DM-ENT-03  
+- **Truy vết PA2:** FR-06, FR-17, FR-29
+
+| Cột | Kiểu | NULL | Mặc định | Khóa | Mô tả |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `id` | `bigint` | NOT NULL | `identity` | PK, UQ(ghép) | Khóa chính. |
+| `facility_id` | `bigint` | NOT NULL |  | UQ(ghép), FK→facility | Cơ sở chứa sân. |
+| `name` | `text` | NOT NULL |  |  | Tên/số hiệu sân, duy nhất trong cơ sở trong số các sân đang hoạt động. |
+| `status` | `court_status` | NOT NULL | `'ACTIVE'::court_status` |  | ACTIVE hoặc DELETED (xóa mềm, UC-12). |
+| `deleted_at` | `timestamp with time zone` | NULL |  |  | Thời điểm xóa; có giá trị khi và chỉ khi status = DELETED. |
+| `created_at` | `timestamp with time zone` | NOT NULL | `now()` |  | Thời điểm tạo sân. |
+
+**Ràng buộc:**
+
+- `court_pkey` (PK): `PRIMARY KEY (id)`
+- `court_id_facility_id_key` (UQ): `UNIQUE (id, facility_id)`
+- `court_facility_id_fkey` (FK): `FOREIGN KEY (facility_id) REFERENCES facility(id) ON DELETE RESTRICT`
+- `court_check` (CK): `CHECK (((status = 'DELETED'::court_status) = (deleted_at IS NOT NULL)))`
+- `court_name_check` (CK): `CHECK ((length(btrim(name)) > 0))`
+
+**Chỉ mục (ngoài các chỉ mục do ràng buộc tạo ra):**
+
+- `court_active_name_uq`: `UNIQUE INDEX court_active_name_uq ... court USING btree (facility_id, name) WHERE (status = 'ACTIVE'::court_status)`
+- `court_facility_active_idx`: `INDEX court_facility_active_idx ... court USING btree (facility_id) WHERE (status = 'ACTIVE'::court_status)`
+
+## DB-TBL-08: `court_price`
+
+Giá của sân theo thời điểm hiệu lực; mỗi sân có một hoặc nhiều dòng giá, dòng mới nhất có `effective_from <= now()` là giá đang áp dụng (DB-ASM-09).
+
+- **Khái niệm miền:** DM-ENT-06  
+- **Truy vết PA2:** FR-07, FR-19
+
+| Cột | Kiểu | NULL | Mặc định | Khóa | Mô tả |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `court_id` | `bigint` | NOT NULL |  | PK, FK→court | Sân. |
+| `effective_from` | `timestamp with time zone` | NOT NULL |  | PK | Thời điểm bắt đầu áp dụng mức giá này. |
+| `amount_per_slot` | `numeric(12,0)` | NOT NULL |  |  | Giá mỗi slot 30 phút (VND), không âm. |
+
+**Ràng buộc:**
+
+- `court_price_pkey` (PK): `PRIMARY KEY (court_id, effective_from)`
+- `court_price_court_id_fkey` (FK): `FOREIGN KEY (court_id) REFERENCES court(id) ON DELETE RESTRICT`
+- `court_price_amount_per_slot_check` (CK): `CHECK ((amount_per_slot >= (0)::numeric))`
+
+## DB-TBL-09: `hold`
+
+Giữ chỗ tạm thời tối đa 5 phút, không gia hạn.
+
+- **Khái niệm miền:** DM-ENT-08  
+- **Truy vết PA2:** FR-10, FR-14, FR-25, FR-31, BR-01, BR-07
+
+| Cột | Kiểu | NULL | Mặc định | Khóa | Mô tả |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `id` | `bigint` | NOT NULL | `identity` | PK, UQ(ghép) | Khóa chính. |
+| `user_id` | `bigint` | NOT NULL |  | FK→app_user | Người giữ chỗ (người chơi, hoặc chủ sân với booking tại quầy). |
+| `facility_id` | `bigint` | NOT NULL |  | UQ(ghép), FK→facility | Cơ sở của hold; mọi dải slot của hold phải thuộc cơ sở này (DM-INV-01). |
+| `status` | `hold_status` | NOT NULL | `'ACTIVE'::hold_status` |  | ACTIVE → CONFIRMED / RELEASED / EXPIRED (xem STM-01). EXPIRED = đã quá hạn nhưng slot chưa nhả xong. |
+| `created_at` | `timestamp with time zone` | NOT NULL | `now()` |  | Thời điểm tạo hold (giờ DB). |
+| `expires_at` | `timestamp with time zone` | NOT NULL | `(now() + '00:05:00'::interval)` |  | Luôn bằng created_at + 5 phút, không đổi (BR-01, BR-07); có CHECK. |
+| `released_at` | `timestamp with time zone` | NULL |  |  | Thời điểm nhả xong; có giá trị khi và chỉ khi status = RELEASED. |
+| `release_failed_at` | `timestamp with time zone` | NULL |  |  | Thời điểm lần nhả gần nhất thất bại; chỉ hợp lệ khi status = EXPIRED; xóa (NULL) khi nhả thành công. Giúp API trả ReleaseFailed (FR-14). |
+
+**Ràng buộc:**
+
+- `hold_pkey` (PK): `PRIMARY KEY (id)`
+- `hold_id_facility_id_key` (UQ): `UNIQUE (id, facility_id)`
+- `hold_facility_id_fkey` (FK): `FOREIGN KEY (facility_id) REFERENCES facility(id) ON DELETE RESTRICT`
+- `hold_user_id_fkey` (FK): `FOREIGN KEY (user_id) REFERENCES app_user(id) ON DELETE RESTRICT`
+- `hold_check` (CK): `CHECK ((expires_at = (created_at + '00:05:00'::interval)))`
+- `hold_check1` (CK): `CHECK (((status = 'RELEASED'::hold_status) = (released_at IS NOT NULL)))`
+- `hold_check2` (CK): `CHECK (((release_failed_at IS NULL) OR (status = 'EXPIRED'::hold_status)))`
+
+**Chỉ mục (ngoài các chỉ mục do ràng buộc tạo ra):**
+
+- `hold_expiry_idx`: `INDEX hold_expiry_idx ... hold USING btree (expires_at) WHERE (status = 'ACTIVE'::hold_status)`
+- `hold_release_retry_idx`: `INDEX hold_release_retry_idx ... hold USING btree (expires_at) WHERE (status = 'EXPIRED'::hold_status)`
+- `hold_user_active_idx`: `INDEX hold_user_active_idx ... hold USING btree (user_id) WHERE (status = 'ACTIVE'::hold_status)`
+
+## DB-TBL-10: `booking`
+
+Đặt chỗ đã xác nhận; luôn sinh ra từ đúng một hold. Hủy là đổi trạng thái, không xóa.
+
+- **Khái niệm miền:** DM-ENT-09  
+- **Truy vết PA2:** FR-11, FR-12, FR-16, FR-21, FR-28, FR-29
+
+| Cột | Kiểu | NULL | Mặc định | Khóa | Mô tả |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `id` | `bigint` | NOT NULL | `identity` | PK, UQ(ghép) | Khóa chính. |
+| `hold_id` | `bigint` | NOT NULL |  | UQ, FK→hold | Hold sinh ra booking; duy nhất, mỗi booking đúng một hold (kể cả booking tại quầy). |
+| `user_id` | `bigint` | NOT NULL |  | FK→app_user | Người đặt: người chơi, hoặc chủ sân với source = IN_PERSON. |
+| `facility_id` | `bigint` | NOT NULL |  | UQ(ghép), FK→facility, FK→hold | Cơ sở; bằng facility_id của hold nhờ khóa ngoại ghép. |
+| `source` | `booking_source` | NOT NULL |  |  | APP hoặc IN_PERSON. |
+| `status` | `booking_status` | NOT NULL | `'CONFIRMED'::booking_status` |  | CONFIRMED, CANCELLED_BY_PLAYER, CANCELLED_BY_OWNER (PA2 để mở tập trạng thái booking). 'Đã hoàn thành' suy ra từ thời gian, không lưu. |
+| `created_at` | `timestamp with time zone` | NOT NULL | `now()` |  | Thời điểm xác nhận booking. |
+| `cancelled_at` | `timestamp with time zone` | NULL |  |  | Thời điểm hủy; có giá trị khi và chỉ khi đã bị hủy. |
+| `cancel_reason` | `owner_change_reason` | NULL |  |  | Lý do chuẩn hóa khi chủ sân hủy (FR-30); NULL khi còn hiệu lực hoặc người chơi hủy. |
+
+**Ràng buộc:**
+
+- `booking_pkey` (PK): `PRIMARY KEY (id)`
+- `booking_hold_id_key` (UQ): `UNIQUE (hold_id)`
+- `booking_id_facility_id_key` (UQ): `UNIQUE (id, facility_id)`
+- `booking_facility_id_fkey` (FK): `FOREIGN KEY (facility_id) REFERENCES facility(id) ON DELETE RESTRICT`
+- `booking_hold_id_facility_id_fkey` (FK): `FOREIGN KEY (hold_id, facility_id) REFERENCES hold(id, facility_id)`
+- `booking_user_id_fkey` (FK): `FOREIGN KEY (user_id) REFERENCES app_user(id) ON DELETE RESTRICT`
+- `booking_check` (CK): `CHECK ((((status = 'CONFIRMED'::booking_status) AND (cancelled_at IS NULL) AND (cancel_reason IS NULL)) OR ((status = 'CANCELLED_BY_PLAYER'::booking_status) AND (cancelled_at IS NOT NULL) AND (cancel_reason IS NULL)) OR ((status = 'CANCELLED_BY_OWNER'::booking_status) AND (cancelled_at IS NOT NULL) AND (cancel_reason IS NOT NULL))))`
+
+**Chỉ mục (ngoài các chỉ mục do ràng buộc tạo ra):**
+
+- `booking_facility_idx`: `INDEX booking_facility_idx ... booking USING btree (facility_id, status)`
+- `booking_user_idx`: `INDEX booking_user_idx ... booking USING btree (user_id, created_at DESC)`
+
+## DB-TBL-11: `schedule_entry`
+
+Lịch chung: mỗi dòng là một sân cùng một dải slot 30 phút liên tiếp đang bị chiếm bởi HOLD, BOOKING hoặc BLOCK. Gộp HoldItem, BookingItem và BlockedPeriod để một ràng buộc chống chồng lấn bao phủ cả ba.
+
+- **Khái niệm miền:** DM-ENT-10, DM-ENT-11, DM-ENT-13  
+- **Truy vết PA2:** FR-09, FR-13, FR-20, FR-22, NFR-02, BR-02, BR-03, BR-13
+
+| Cột | Kiểu | NULL | Mặc định | Khóa | Mô tả |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `id` | `bigint` | NOT NULL | `identity` | PK | Khóa chính. |
+| `court_id` | `bigint` | NOT NULL |  | UQ(ghép), FK→court | Sân bị chiếm. |
+| `facility_id` | `bigint` | NOT NULL |  | FK→booking, FK→court, FK→hold | Cơ sở của sân (cố ý lặp để khóa ngoại ghép buộc hold/booking/sân cùng một cơ sở; xem mục chuẩn hóa). |
+| `start_time` | `timestamp with time zone` | NOT NULL |  |  | Đầu dải, là bội của 30 phút. |
+| `end_time` | `timestamp with time zone` | NOT NULL |  |  | Cuối dải (không gồm), là bội của 30 phút, sau start_time. Dải = [start_time, end_time). |
+| `entry_type` | `entry_type` | NOT NULL |  |  | HOLD, BOOKING hoặc BLOCK. HOLD chuyển thành BOOKING khi xác nhận. |
+| `hold_id` | `bigint` | NULL |  | UQ(ghép), FK→hold | Hold gốc (HOLD và BOOKING); NULL với BLOCK. |
+| `booking_id` | `bigint` | NULL |  | FK→booking | Booking (chỉ BOOKING); NULL với HOLD và BLOCK. |
+| `blocked_by` | `bigint` | NULL |  | FK→app_user | Chủ sân tạo khoảng khóa (chỉ BLOCK). |
+| `is_active` | `boolean` | NOT NULL | `true` |  | true = đang chiếm chỗ. Nhả hold, hủy booking thì chuyển false và giữ lại làm lịch sử. BLOCK luôn true (không có thao tác gỡ khóa, DB-ASM-07). |
+| `created_at` | `timestamp with time zone` | NOT NULL | `now()` |  | Thời điểm tạo dòng. |
+
+**Ràng buộc:**
+
+- `schedule_entry_pkey` (PK): `PRIMARY KEY (id)`
+- `schedule_entry_hold_id_court_id_key` (UQ): `UNIQUE (hold_id, court_id)`
+- `schedule_entry_blocked_by_fkey` (FK): `FOREIGN KEY (blocked_by) REFERENCES app_user(id) ON DELETE RESTRICT`
+- `schedule_entry_booking_id_facility_id_fkey` (FK): `FOREIGN KEY (booking_id, facility_id) REFERENCES booking(id, facility_id)`
+- `schedule_entry_court_id_facility_id_fkey` (FK): `FOREIGN KEY (court_id, facility_id) REFERENCES court(id, facility_id)`
+- `schedule_entry_hold_id_facility_id_fkey` (FK): `FOREIGN KEY (hold_id, facility_id) REFERENCES hold(id, facility_id)`
+- `schedule_entry_no_overlap` (EX): `EXCLUDE USING gist (court_id WITH =, tstzrange(start_time, end_time, '[)'::text) WITH &&) WHERE (is_active)`
+- `schedule_entry_check` (CK): `CHECK ((end_time > start_time))`
+- `schedule_entry_check1` (CK): `CHECK ((((entry_type = 'HOLD'::entry_type) AND (hold_id IS NOT NULL) AND (booking_id IS NULL) AND (blocked_by IS NULL)) OR ((entry_type = 'BOOKING'::entry_type) AND (hold_id IS NOT NULL) AND (booking_id IS NOT NULL) AND (blocked_by IS NULL)) OR ((entry_type = 'BLOCK'::entry_type) AND (hold_id IS NULL) AND (booking_id IS NULL) AND (blocked_by IS NOT NULL))))`
+- `schedule_entry_check2` (CK): `CHECK ((is_active OR (entry_type <> 'BLOCK'::entry_type)))`
+- `schedule_entry_end_time_check` (CK): `CHECK ((((EXTRACT(epoch FROM end_time))::bigint % (1800)::bigint) = 0))`
+- `schedule_entry_start_time_check` (CK): `CHECK ((((EXTRACT(epoch FROM start_time))::bigint % (1800)::bigint) = 0))`
+
+**Chỉ mục (ngoài các chỉ mục do ràng buộc tạo ra):**
+
+- `schedule_entry_booking_idx`: `INDEX schedule_entry_booking_idx ... schedule_entry USING btree (booking_id) WHERE (booking_id IS NOT NULL)`
+
+## DB-TBL-12: `notification`
+
+Thông báo trong ứng dụng gửi cho người chơi khi chủ sân hủy booking. Không có trạng thái đã đọc (DB-ASM-08).
+
+- **Khái niệm miền:** DM-ENT-12  
+- **Truy vết PA2:** FR-30, NFR-09, BR-16
+
+| Cột | Kiểu | NULL | Mặc định | Khóa | Mô tả |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `id` | `bigint` | NOT NULL | `identity` | PK | Khóa chính. |
+| `user_id` | `bigint` | NOT NULL |  | FK→app_user | Người nhận. |
+| `booking_id` | `bigint` | NULL |  | FK→booking | Booking liên quan (cho biết sân và slot bị ảnh hưởng qua schedule_entry). |
+| `reason` | `owner_change_reason` | NOT NULL |  |  | Lý do chuẩn hóa: BLOCKED_PERIOD, HOURS_CHANGED, COURT_DELETED (DB-ASM-04). |
+| `message` | `text` | NOT NULL |  |  | Nội dung hiển thị. |
+| `created_at` | `timestamp with time zone` | NOT NULL | `now()` |  | Thời điểm tạo. |
+
+**Ràng buộc:**
+
+- `notification_pkey` (PK): `PRIMARY KEY (id)`
+- `notification_booking_id_fkey` (FK): `FOREIGN KEY (booking_id) REFERENCES booking(id) ON DELETE RESTRICT`
+- `notification_user_id_fkey` (FK): `FOREIGN KEY (user_id) REFERENCES app_user(id) ON DELETE RESTRICT`
+
+**Chỉ mục (ngoài các chỉ mục do ràng buộc tạo ra):**
+
+- `notification_user_idx`: `INDEX notification_user_idx ... notification USING btree (user_id, created_at DESC)`
