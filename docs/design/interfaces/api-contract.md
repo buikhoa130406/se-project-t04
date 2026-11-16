@@ -115,6 +115,7 @@
   "holdId": 101,
   "facilityId": 12,
   "source": "APP",
+  "isDirect": false,
   "status": "ACTIVE",
   "releaseState": "None",
   "totalPrice": 160000,
@@ -133,8 +134,8 @@
   - `status: "EXPIRED"` $\rightarrow$ `releaseState: "Releasing"` (chưa nhả xong & `release_failed_at IS NULL`) hoặc `"ReleaseFailed"` (`release_failed_at IS NOT NULL` hoặc quá 5s)
   - `status: "RELEASED"` $\rightarrow$ `releaseState: "Released"`
   - `status: "CONFIRMED"` $\rightarrow$ `releaseState: "None"`
-- **`GET /holds/active`:** Luôn trả cấu trúc thống nhất `{ "activeHold": <HoldObject | null>, "serverNow": "..." }` (chỉ dùng khi F5 để khôi phục Hold `ACTIVE` đang chạy của user).
-- **`GET /holds/:holdId`:** Dùng khi `UI-07` **đã có `holdId`** (ví dụ sau khi nhận `202 Releasing` hoặc `ReleaseFailed`) để hỏi trạng thái của đúng `holdId` đó, bảo đảm **không trả nhầm lượt giữ ở tab khác**:
+- **`GET /holds/active` (tùy chọn `?holdId=...`):** Khi F5 chưa giữ `holdId`, trả `{ "activeHold": <HoldObject | null>, "serverNow": "..." }` (trong `HoldObject` luôn có `isDirect: true | false` suy ra từ `hold.source === 'IN_PERSON'` để khôi phục đúng ngữ cảnh đặt tại quầy nếu F5 giữa 2 bước `UC-13`). Nếu truyền `?holdId=...`, trả trạng thái của đúng `holdId` đó.
+- **`GET /holds/:holdId`:** Endpoint chuyên biệt khi `UI-07` **đã có `holdId`** (ví dụ sau `202 Releasing` hoặc `ReleaseFailed`) để hỏi trạng thái của đúng `holdId` đó, bảo đảm **không trả nhầm lượt giữ ở tab khác**:
   ```json
   {
     "holdId": 101,
@@ -197,7 +198,7 @@
    - **Bước 1 — Tạo Hold tại quầy (`POST /owner/facilities/:facilityId/direct-holds` + `Idempotency-Key`):**
      - `OwnerScheduleService` kiểm tra `Facility.isOwnedBy(ownerId)`, rồi gọi `BookingService.createHold(ownerId, "FACILITY_OWNER", facilityId, selections, isDirect = true)`.
      - Lưu `hold` với `source = 'IN_PERSON'` (`#33`), **miễn mốc 60 phút** (`AC-25`, đặt trước 30 phút vẫn hợp lệ) nhưng không đè Hold/Booking/Block hiện có.
-     - Trả `201`: `{ holdId, facilityId, source: "IN_PERSON", status: "ACTIVE", totalPrice, expiresAt, serverNow, items }`.
+     - Trả `201`: `{ holdId, facilityId, source: "IN_PERSON", isDirect: true, status: "ACTIVE", totalPrice, expiresAt, serverNow, items }`.
    - **Bước 2 — Xác nhận đặt tại quầy (`POST /owner/facilities/:facilityId/direct-holds/:holdId/confirm` + `Idempotency-Key`):**
      - `OwnerScheduleService` kiểm tra quyền sở hữu và đọc `hold.source === 'IN_PERSON'` (giữ ngữ cảnh `isDirect = true` qua hai bước), gọi `BookingService.confirmBooking(ownerId, holdId, true)`.
      - Trả `201`: `{ bookingId, holdId, source: "IN_PERSON", status: "CONFIRMED", totalPrice, createdAt }`. Nếu bấm xác nhận sau khi hết hạn trả `409 HOLD_EXPIRED`.
@@ -215,7 +216,7 @@
            "playerName": "Nguyễn Văn A",
            "earliestStartTime": "2026-11-18T18:00:00.000Z",
            "totalPrice": 160000,
-           "affectedItems": [
+           "affectedSlots": [
              { "courtId": 1, "courtName": "Sân 1", "startTime": "2026-11-18T18:00:00.000Z", "endTime": "2026-11-18T18:30:00.000Z" }
            ]
          }
