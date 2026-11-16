@@ -12,7 +12,7 @@ Năm sơ đồ tuần tự (sequence diagram) chính bao quát các use case có
 
 **Quy ước chung:**
 
-* Tên lớp và chữ ký phương thức của các thao tác giữ chỗ, xác nhận, nhả chỗ và hủy lượt đặt đã được đối chiếu đồng bộ với Class Diagram (3.3.2 — PR `#31`, mục 3.2 `CLS-08`). Sơ đồ chỉ nêu kết quả nghiệp vụ, không cố định mã HTTP (đối chiếu với đặc tả API 3.1.4 — `#12`).
+* Tên lớp và chữ ký phương thức của các thao tác giữ chỗ, xác nhận, nhả chỗ và hủy lượt đặt đã được đối chiếu đồng bộ với Class Diagram (3.3.2 — PR `#31`, mục 3.2 `CLS-08`) theo chuẩn **tham số đầu là `userId`** (thống nhất với `createHold(userId, ...)`) và do `BookingService` thực hiện trực tiếp, không qua lớp trung gian `HoldService`. Sơ đồ chỉ nêu kết quả nghiệp vụ, không cố định mã HTTP (đối chiếu với đặc tả API 3.1.4 — `#12`).
 * "Một transaction" là yêu cầu: kiểm tra và ghi nằm trong cùng một thao tác nguyên tử, tất cả hoặc không có gì. Cơ chế chống trùng (ràng buộc dữ liệu, khóa, mức cô lập) được thiết kế chi tiết tại 3.1.2 (`#10`).
 * Luật nghiệp vụ (cùng cơ sở, slot liên tiếp, hạn chót đặt, 24 giờ, 3 giờ) nằm ở backend. Đồng hồ là của máy chủ.
 * Kiểm tra xác thực (`verifySession`) chỉ vẽ ở `SEQ-01`; các sơ đồ sau coi như đã đăng nhập.
@@ -75,7 +75,7 @@ sequenceDiagram
 
 * **Truy vết:** UC-06, FR-11, FR-12, FR-14, FR-15, FR-31, BR-01, BR-06, BR-15, NFR-02, NFR-03, AC-19, AC-35, AC-36, AC-38, AC-39.
 
-Người chơi xác nhận khi hold còn hiệu lực. Toàn bộ việc đọc hold, kiểm tra và ghi nằm trong **một transaction**: hold được khóa để đọc, kiểm tra quyền sở hữu, trạng thái `Active` và `now < expiresAt`, rồi kiểm tra lại các slot. Việc từ chối khi hết hạn dựa trên `expiresAt`, **không** chờ tác vụ nhả chạy (xem `SEQ-02B`): người dùng xác nhận sau khi lượt giữ hết hạn (`now >= expiresAt`) phải nhận kết quả từ chối `ConfirmRejected(HoldExpired)` và dữ liệu lượt đặt giữ nguyên (FR-11, AC-35). Nếu hợp lệ, booking được tạo ở trạng thái `Confirmed`, các slot chuyển sang `Booked` và hold đóng. Nếu xác nhận và nhả hết hạn xảy ra cùng lúc thì chỉ một bên thắng nhờ khóa trên hold.
+Người chơi xác nhận khi hold còn hiệu lực qua `BookingService.confirmBooking(userId, holdId, isDirect)`; `isDirect` mặc định `false` với người chơi. Toàn bộ việc đọc hold, kiểm tra và ghi nằm trong **một transaction**: hold được khóa để đọc, kiểm tra quyền sở hữu, trạng thái `Active` và `now < expiresAt`, rồi kiểm tra lại các slot. Việc từ chối khi hết hạn dựa trên `expiresAt`, **không** chờ tác vụ nhả chạy (xem `SEQ-02B`): người dùng xác nhận sau khi lượt giữ hết hạn (`now >= expiresAt`) phải nhận kết quả từ chối `HoldExpired` và dữ liệu lượt đặt giữ nguyên (FR-11, AC-35). Nếu hợp lệ, booking được tạo ở trạng thái `CONFIRMED`, các slot chuyển sang `Booked` và hold đóng. Nếu xác nhận và nhả hết hạn xảy ra cùng lúc thì chỉ một bên thắng nhờ khóa trên hold.
 
 
 *Hình 4.4.2 — Sơ đồ tuần tự cho UC-06 (`SEQ-02`)*
@@ -86,22 +86,19 @@ sequenceDiagram
     participant ConfirmPage
     participant BookingController
     participant BookingService
-    participant HoldService
     participant ScheduleService
     participant Database
 
     Player->>ConfirmPage: bấm Confirm booking
     ConfirmPage->>BookingController: confirmBooking(holdId)
-    BookingController->>BookingService: confirmBooking(holdId, userId)
+    BookingController->>BookingService: confirmBooking(userId, holdId, isDirect = false)
     BookingService->>Database: BEGIN transaction
-    BookingService->>HoldService: getHoldForUpdate(holdId)
-    HoldService->>Database: selectHoldForUpdate(holdId)
-    Database-->>HoldService: holdRecord
-    HoldService-->>BookingService: hold hoặc notFound
+    BookingService->>Database: selectHoldForUpdate(holdId)
+    Database-->>BookingService: holdRecord hoặc notFound
 
     alt không tồn tại, thuộc user khác, không còn Active hoặc now >= expiresAt
         BookingService->>Database: ROLLBACK
-        BookingService-->>BookingController: ConfirmRejected(HoldNotFound, NotOwner hoặc HoldExpired)
+        BookingService-->>BookingController: HoldNotFound, NotOwner hoặc HoldExpired
         BookingController-->>ConfirmPage: từ chối xác nhận (dữ liệu lượt đặt giữ nguyên), thông báo, cập nhật tình trạng sân
     else hold hợp lệ
         BookingService->>ScheduleService: recheckAvailability(hold.items)
@@ -111,13 +108,13 @@ sequenceDiagram
 
         alt có slot không còn hợp lệ
             BookingService->>Database: ROLLBACK
-            BookingService-->>BookingController: ConfirmRejected(SlotsInvalid)
+            BookingService-->>BookingController: SlotConflict
             BookingController-->>ConfirmPage: từ chối xác nhận, cập nhật tình trạng sân
         else các slot còn hợp lệ
-            BookingService->>Database: createBooking(Confirmed) + markSlotsBooked + closeHold
+            BookingService->>Database: createBooking(CONFIRMED, source = online nếu isDirect = false, in-person nếu isDirect = true) + markSlotsBooked + closeHold
             BookingService->>Database: COMMIT
             Database-->>BookingService: booking
-            BookingService-->>BookingController: booking
+            BookingService-->>BookingController: Booking (CONFIRMED)
             BookingController-->>ConfirmPage: hiển thị trạng thái đã xác nhận
         end
     end
@@ -129,7 +126,7 @@ sequenceDiagram
 
 Sơ đồ này thể hiện bốn tình huống của một hold đang `Active`:
 
-* **Hết hạn 5 phút:** hold chuyển `Expired` (từ chối xác nhận ngay, giao diện hiển thị thông báo hết hạn và khóa nút xác nhận trong lúc nhả), tác vụ nền nhả slot trong vòng 5 giây rồi hold sang `Released`. Trong trạng thái `Expired`, giao diện nhận **ba kết quả khác nhau** từ `getHoldStatus` (FR-14, AC-20):
+* **Hết hạn 5 phút:** hold chuyển `Expired` (từ chối xác nhận ngay, giao diện hiển thị thông báo hết hạn và khóa nút xác nhận trong lúc nhả), tác vụ nền nhả slot trong vòng 5 giây rồi hold sang `Released`. Trong trạng thái `Expired`, giao diện đọc trực tiếp **ba trạng thái khác nhau** từ phản hồi API `#12` (`releaseHold` / `getActiveHold`) (FR-14, AC-20):
   * `Releasing`: đang giải phóng. Giao diện vẫn hiển thị thông báo hết hạn, tạm khóa nút xác nhận, **chưa** cho chọn lại và **không** báo lỗi; tiếp tục hỏi lại trạng thái.
   * `ReleaseFailed`: giải phóng thất bại (tác vụ nhả báo lỗi, hoặc quá 5 giây sau `expiresAt` mà hold vẫn chưa `Released`). Chỉ khi đó giao diện mới báo lỗi giải phóng và không cho tiếp tục như thể đã nhả; tác vụ nền thử lại ở chu kỳ sau.
   * `Released`: giải phóng thành công. Chỉ lúc này giao diện mới cho chọn lại và cập nhật tình trạng sân.
@@ -144,7 +141,7 @@ sequenceDiagram
     actor Player
     participant ConfirmPage
     participant BookingController
-    participant HoldService
+    participant BookingService
     participant ReleaseJob
     participant Database
 
@@ -153,22 +150,22 @@ sequenceDiagram
     alt hold hết hạn 5 phút
         Note over ConfirmPage: đếm ngược về 0 theo expiresAt của server, hiển thị thông báo hết hạn, khóa nút Confirm trong lúc nhả
         loop mỗi chu kỳ không quá 1 giây
-            ReleaseJob->>HoldService: releaseExpiredHolds(now)
-            HoldService->>Database: markExpired(holds có expiresAt <= now)
-            HoldService->>Database: releaseSlots(holds vừa hết hạn)
+            ReleaseJob->>BookingService: releaseExpiredHolds(now)
+            BookingService->>Database: markExpired(holds có expiresAt <= now)
+            BookingService->>Database: releaseSlots(holds vừa hết hạn)
 
             alt nhả thành công
-                Database-->>HoldService: ok (hold Released, slot Available)
+                Database-->>BookingService: ok (hold Released, slot Available)
             else nhả lỗi
-                Database-->>HoldService: error (hold giữ Expired, ghi nhận nhả lỗi, thử lại ở chu kỳ sau)
+                Database-->>BookingService: error (hold giữ Expired, ghi nhận nhả lỗi, thử lại ở chu kỳ sau)
             end
         end
 
-        ConfirmPage->>BookingController: getHoldStatus(holdId)
-        BookingController->>HoldService: getHoldStatus(holdId, userId)
-        HoldService->>Database: selectHold(holdId)
-        Database-->>HoldService: holdRecord
-        HoldService-->>BookingController: status (Released, Releasing hoặc ReleaseFailed)
+        ConfirmPage->>BookingController: getActiveHold()
+        BookingController->>BookingService: getActiveHold(userId)
+        BookingService->>Database: selectHold(userId)
+        Database-->>BookingService: holdRecord
+        BookingService-->>BookingController: status (Released, Releasing hoặc ReleaseFailed)
 
         alt status = Released
             BookingController-->>ConfirmPage: cho chọn lại, cập nhật tình trạng sân
@@ -180,18 +177,26 @@ sequenceDiagram
 
     else người dùng hủy, quay lại hoặc đổi lựa chọn
         ConfirmPage->>BookingController: releaseHold(holdId)
-        BookingController->>HoldService: releaseHold(holdId, userId)
-        HoldService->>Database: setReleased + releaseSlots (một transaction)
-        Database-->>HoldService: ok
-        HoldService-->>BookingController: Released
-        BookingController-->>ConfirmPage: về màn chọn slot, cập nhật tình trạng sân
+        BookingController->>BookingService: releaseHold(userId, holdId)
+        BookingService->>Database: selectHoldForUpdate(holdId)
+        Database-->>BookingService: holdRecord
+
+        alt hold không thuộc user này
+            BookingService-->>BookingController: NotOwner
+            BookingController-->>ConfirmPage: từ chối nhả, dữ liệu không đổi
+        else đúng chủ hold
+            BookingService->>Database: setReleased + releaseSlots (một transaction)
+            Database-->>BookingService: ok
+            BookingService-->>BookingController: Released
+            BookingController-->>ConfirmPage: về màn chọn slot, cập nhật tình trạng sân
+        end
 
     else tải lại trang
         ConfirmPage->>BookingController: getActiveHold()
-        BookingController->>HoldService: getActiveHold(userId)
-        HoldService->>Database: selectActiveHold(userId)
-        Database-->>HoldService: hold
-        HoldService-->>BookingController: hold(expiresAt, serverNow)
+        BookingController->>BookingService: getActiveHold(userId)
+        BookingService->>Database: selectActiveHold(userId)
+        Database-->>BookingService: hold
+        BookingService-->>BookingController: hold(expiresAt, serverNow)
         BookingController-->>ConfirmPage: tiếp tục đếm ngược, không đặt lại 5 phút
 
     else đóng tab hoặc mất kết nối
@@ -216,30 +221,34 @@ sequenceDiagram
     participant BookingService
     participant Database
 
-    Player->>BookingDetailPage: bấm Cancel
-    BookingDetailPage->>BookingController: cancelBooking(bookingId)
-    BookingController->>BookingService: cancelBooking(bookingId, userId)
+    Player->>BookingDetailPage: bấm Cancel (có thể nhập lý do)
+    BookingDetailPage->>BookingController: cancelBooking(bookingId, reason?)
+    BookingController->>BookingService: cancelBookingByPlayer(userId, bookingId, reason?)
     BookingService->>Database: BEGIN transaction
     BookingService->>Database: getBookingForUpdate(bookingId)
-    Database-->>BookingService: booking
+    Database-->>BookingService: booking hoặc notFound
 
-    alt không tồn tại hoặc không phải chủ booking
+    alt không tồn tại
         BookingService->>Database: ROLLBACK
-        BookingService-->>BookingController: CancelNotAllowed(NotFoundOrNotOwner)
+        BookingService-->>BookingController: BookingNotFound
         BookingController-->>BookingDetailPage: từ chối hủy
-    else booking không ở trạng thái Confirmed
+    else không phải chủ booking
         BookingService->>Database: ROLLBACK
-        BookingService-->>BookingController: CancelNotAllowed(InvalidState)
+        BookingService-->>BookingController: NotOwner
+        BookingController-->>BookingDetailPage: từ chối hủy
+    else booking không ở trạng thái CONFIRMED
+        BookingService->>Database: ROLLBACK
+        BookingService-->>BookingController: InvalidState
         BookingController-->>BookingDetailPage: từ chối hủy
     else còn dưới 3 giờ trước slot sớm nhất
         BookingService->>Database: ROLLBACK
-        BookingService-->>BookingController: CancelNotAllowed(TooLate)
+        BookingService-->>BookingController: CancelDeadlinePassed
         BookingController-->>BookingDetailPage: từ chối hủy
     else đúng chủ, còn ít nhất 3 giờ (đúng 3 giờ vẫn được)
-        BookingService->>Database: setStatus(CancelledByPlayer) + releaseSlots
+        BookingService->>Database: setStatus(CANCELLED_BY_PLAYER, reason) + releaseSlots
         BookingService->>Database: COMMIT
         Database-->>BookingService: ok
-        BookingService-->>BookingController: CancelledByPlayer
+        BookingService-->>BookingController: Booking (CANCELLED_BY_PLAYER)
         BookingController-->>BookingDetailPage: hủy thành công, lịch được cập nhật
     end
 ```
@@ -311,7 +320,7 @@ sequenceDiagram
                     Note over FacilityOwner,CourtSchedulePage: chủ sân xem danh sách mới rồi xác nhận lại, quay về bước confirmBlock
                 else danh sách khớp và hợp lệ
                     ScheduleService->>BookingService: cancelAffected(confirmedBookings, reason)
-                    BookingService->>Database: setStatus(CancelledByOwner) + releaseSlots
+                    BookingService->>Database: setStatus(CANCELLED_BY_OWNER) + releaseSlots
                     Database-->>BookingService: ok
                     BookingService-->>ScheduleService: ok
                     ScheduleService->>Database: createBlockedPeriod(courtId, period)
@@ -334,7 +343,7 @@ sequenceDiagram
 
 * **Truy vết:** UC-13, FR-03, FR-10, FR-11, FR-12, FR-21, FR-22, FR-27, BR-03, BR-08, BR-10, BR-13, NFR-02..04, NFR-08, AC-07, AC-25, AC-33.
 
-Chủ sân đặt thay khách tại quầy theo đúng luồng của người chơi: chọn sân và slot, giữ chỗ, rồi xác nhận (UC-05 và UC-06). Khác biệt: hệ thống kiểm tra chủ sân có quản lý cơ sở đó (`verifyFacilityOwner(userId, facilityId)`), sau đó `BookingController` gọi `BookingService.createHold(userId, FacilityOwner, facilityId, selections, isDirect = true)` (đồng bộ với `CLS-08` ở PR `#31`). Chỉ khi `actorRole = FacilityOwner` đã qua kiểm tra quyền sở hữu `facilityId` và `isDirect = true`, chủ sân mới được miễn giới hạn đặt trước 2 slot (60 phút) để đặt được khung giờ bắt đầu sau 30 phút (FR-27, AC-25), nhưng vẫn không được đè lên slot đang held, booked hoặc unavailable (BR-13). Booking được ghi vào lịch chung với nguồn là `in-person` (không lưu thông tin khách, `ASM-09`). Hold hết hạn, nhả, tải lại và đóng tab xử lý như `SEQ-02B`.
+Chủ sân đặt thay khách tại quầy theo đúng luồng của người chơi: chọn sân và slot, giữ chỗ, rồi xác nhận (UC-05 và UC-06). Khác biệt: hệ thống kiểm tra chủ sân có quản lý cơ sở đó (`verifyFacilityOwner(userId, facilityId)`), sau đó `BookingController` gọi `BookingService.createHold(userId, FacilityOwner, facilityId, selections, isDirect = true)` (đồng bộ với `CLS-08` ở PR `#31`). Chỉ khi `actorRole = FacilityOwner` đã qua kiểm tra quyền sở hữu `facilityId` và `isDirect = true`, chủ sân mới được miễn giới hạn đặt trước 2 slot (60 phút) để đặt được khung giờ bắt đầu sau 30 phút (FR-27, AC-25), nhưng vẫn không được đè lên slot đang held, booked hoặc unavailable (BR-13). Khi xác nhận, `BookingService.confirmBooking(userId, holdId, isDirect = true)` được gọi với `isDirect = true` sau khi đã kiểm tra quyền sở hữu cơ sở. Booking được ghi vào lịch chung với nguồn là `in-person` (không lưu thông tin khách, `ASM-09`). Hold hết hạn, nhả, tải lại và đóng tab xử lý như `SEQ-02B`.
 
 
 *Hình 4.4.5 — Sơ đồ tuần tự cho UC-13 (`SEQ-05`)*
@@ -346,7 +355,6 @@ sequenceDiagram
     participant BookingController
     participant AuthService
     participant BookingService
-    participant HoldService
     participant ScheduleService
     participant Database
 
@@ -360,43 +368,39 @@ sequenceDiagram
     else là chủ cơ sở
         AuthService-->>BookingController: authorized
         BookingController->>BookingService: createHold(userId, FacilityOwner, facilityId, selections, isDirect = true)
-        BookingService->>HoldService: createHold(userId, FacilityOwner, facilityId, selections, isDirect = true)
-        HoldService->>ScheduleService: validateSelection(facilityId, selections, FacilityOwner, isDirect = true, now)
-        Note over HoldService,ScheduleService: isDirect = true tại cơ sở quản lý nên được miễn giới hạn đặt trước 2 slot (đặt trước 30 phút vẫn hợp lệ theo AC-25), các luật khác như SEQ-01
+        BookingService->>ScheduleService: validateSelection(facilityId, selections, FacilityOwner, isDirect = true, now)
+        Note over BookingService,ScheduleService: isDirect = true tại cơ sở quản lý nên được miễn giới hạn đặt trước 2 slot (đặt trước 30 phút vẫn hợp lệ theo AC-25), các luật khác như SEQ-01
 
         alt vi phạm luật lựa chọn
-            ScheduleService-->>HoldService: invalid(reason)
-            HoldService-->>BookingService: SelectionInvalid(reason)
+            ScheduleService-->>BookingService: invalid(reason)
             BookingService-->>BookingController: SelectionInvalid(reason)
             BookingController-->>BookingPage: báo lỗi, không giữ slot nào, xóa lựa chọn
         else lựa chọn đúng luật
-            ScheduleService-->>HoldService: valid
-            HoldService->>Database: createHoldAtomically(userId, facilityId, selections, expiresAt = now + 5 phút)
-            Note over HoldService,Database: một transaction: kiểm tra mọi slot còn trống rồi ghi hold, không đè slot held, booked hoặc unavailable
+            ScheduleService-->>BookingService: valid
+            BookingService->>Database: createHoldAtomically(userId, facilityId, selections, expiresAt = now + 5 phút)
+            Note over BookingService,Database: một transaction: kiểm tra mọi slot còn trống rồi ghi hold, không đè slot held, booked hoặc unavailable
 
             alt slot đang held, booked hoặc unavailable
-                Database-->>HoldService: conflict(slots), rollback, không giữ slot nào
-                HoldService-->>BookingService: SelectionInvalid(slots)
+                Database-->>BookingService: conflict(slots), rollback, không giữ slot nào
                 BookingService-->>BookingController: SelectionInvalid(slots)
                 BookingController-->>BookingPage: báo slot lỗi, xóa lựa chọn
             else giữ chỗ thành công
-                Database-->>HoldService: hold (expiresAt = now + 5 phút)
-                HoldService-->>BookingService: hold
+                Database-->>BookingService: hold (expiresAt = now + 5 phút)
                 BookingService-->>BookingController: hold
                 BookingController-->>BookingPage: màn hình xác nhận + thời gian giữ chỗ còn lại
 
                 FacilityOwner->>BookingPage: bấm Confirm booking
                 BookingPage->>BookingController: confirmBooking(holdId)
-                BookingController->>BookingService: confirmBooking(holdId, userId)
-                Note over BookingController,BookingService: kiểm tra hold và slot trong một transaction như SEQ-02
+                BookingController->>BookingService: confirmBooking(userId, holdId, isDirect = true)
+                Note over BookingController,BookingService: isDirect = true chỉ được truyền sau khi đã kiểm tra quyền sở hữu cơ sở. Kiểm tra hold và slot trong một transaction như SEQ-02
 
-                alt xác nhận bị từ chối (hold hết hạn, không hợp lệ hoặc slot không còn hợp lệ)
-                    BookingService-->>BookingController: ConfirmRejected(reason)
+                alt xác nhận bị từ chối (HoldNotFound, NotOwner, HoldExpired hoặc SlotConflict)
+                    BookingService-->>BookingController: HoldNotFound, NotOwner, HoldExpired hoặc SlotConflict
                     BookingController-->>BookingPage: từ chối xác nhận, cập nhật tình trạng sân
                 else xác nhận thành công
-                    BookingService->>Database: createBooking(source = in-person) + markSlotsBooked + closeHold
+                    BookingService->>Database: createBooking(CONFIRMED, source = in-person) + markSlotsBooked + closeHold
                     Database-->>BookingService: booking
-                    BookingService-->>BookingController: booking
+                    BookingService-->>BookingController: Booking (CONFIRMED)
                     BookingController-->>BookingPage: booking đã ghi vào lịch chung
                 end
             end
@@ -418,22 +422,23 @@ UC-12 (đổi giờ hoạt động hoặc xóa sân) không có sơ đồ riêng
 
 ### 8.1 Bảng thống nhất 4 thao tác trọng tâm (Đồng bộ với Mục 3.2 `CLS-08` của PR `#31`)
 
-| Thao tác | Lớp thực hiện | Tham số | Kết quả thành công | Kết quả khi thất bại | Đối chiếu tình huống kiểm chứng |
-| ----- | ----- | ----- | ----- | ----- | ----- |
-| **Giữ chỗ (`createHold`)** | `BookingService` (gọi `ScheduleService.validateSelection` và ghi nguyên tử) | `(userId, actorRole, facilityId, selections, isDirect)` | `Hold` (`status = Active`, `expiresAt = now + 5 phút`) | `SelectionInvalid(reason)` hoặc `SelectionInvalid(slots)` (rollback toàn bộ, không giữ slot nào) | Chủ sân đã qua `verifyFacilityOwner(userId, facilityId)` gọi với `actorRole = FacilityOwner, isDirect = true` vẫn đặt tại quầy được khi khung giờ bắt đầu sau 30 phút (AC-25). |
-| **Xác nhận (`confirmBooking`)** | `BookingService` (phối hợp `HoldService.getHoldForUpdate` và `ScheduleService.recheckAvailability`) | `(holdId, userId)` | `Booking` (`status = Confirmed`, `source = online` hoặc `in-person`), đóng `Hold`, các slot sang `Booked` | `ConfirmRejected(HoldNotFound \| NotOwner \| HoldExpired \| SlotsInvalid)` (rollback, không tạo booking) | Người dùng xác nhận sau khi lượt giữ hết hạn (`now >= expiresAt`) nhận ngay kết quả từ chối `ConfirmRejected(HoldExpired)`, dữ liệu lượt đặt giữ nguyên (FR-11, AC-35). |
-| **Nhả chỗ (`releaseHold` / `releaseExpiredHolds` / `getHoldStatus`)** | `HoldService` (được gọi từ `BookingController` hoặc `ReleaseJob`) | `releaseHold(holdId, userId)`; `releaseExpiredHolds(now)`; `getHoldStatus(holdId, userId)` | `Released` (hold sang `Released`, slot về `Available`) | Khi hết hạn mà chưa nhả xong: `Releasing` (đang giải phóng $< 5$ giây) hoặc `ReleaseFailed` (nhả lỗi hoặc quá 5 giây) | Giao diện chỉ mở cho chọn lại sau khi nhận `Released` (FR-14, AC-20). |
-| **Hủy lượt đặt (`cancelBooking` / `cancelAffected`)** | `BookingService` | Người chơi: `cancelBooking(bookingId, userId)`; Chủ sân (qua `ScheduleService.applyChange`): `cancelAffected(confirmedBookings, reason)` | `CancelledByPlayer` (khi còn $\ge 3$ giờ) hoặc `CancelledByOwner` (khi còn $\ge 24$ giờ, kèm thông báo), nhả toàn bộ slot của đơn | `CancelNotAllowed(NotFoundOrNotOwner \| InvalidState \| TooLate)` (rollback, giữ nguyên trạng thái `Confirmed`) | Hủy toàn bộ đơn, đúng mốc $\ge 3$ giờ với người chơi (FR-28, AC-26, AC-27) và $\ge 24$ giờ với chủ sân (FR-29, AC-28, AC-29). |
+Chuẩn chung: **tham số đầu là `userId`** (thống nhất với `createHold(userId, ...)`) và `BookingService` thực hiện trực tiếp (không cần lớp trung gian `HoldService`; nếu `SEQ` giữ tên `HoldService` thì ánh xạ 1-1 sang `BookingService`).
+
+| Thao tác | Lớp & Chữ ký chốt | Nguồn / Ghi chú | Kết quả thành công | Kết quả thất bại |
+| ----- | ----- | ----- | ----- | ----- |
+| **Giữ chỗ** | `BookingService.createHold(userId, actorRole, facilityId, selections, isDirect)` | Gọi `ScheduleService.validateSelection` rồi ghi nguyên tử. `isDirect` mặc định `false` với người chơi; chủ sân đã qua `verifyFacilityOwner(userId, facilityId)` gọi với `actorRole = FacilityOwner, isDirect = true` thì đặt tại quầy được khi khung giờ bắt đầu sau 30 phút (AC-25). | `Hold` (`status = Active`, `expiresAt = now + 5 phút`) | `SelectionInvalid(reason)` hoặc `SelectionInvalid(slots)` (rollback toàn bộ, không giữ slot nào) |
+| **Xác nhận lượt đặt** | `BookingService.confirmBooking(userId, holdId, isDirect)` | `isDirect` mặc định `false` với người chơi; với đặt tại quầy được truyền `true` từ tầng đặt tại quầy sau khi đã kiểm tra quyền sở hữu (hoặc đối chiếu khớp với `SlotHold`). Phối hợp `ScheduleService.recheckAvailability`. | `Booking` (`CONFIRMED`) | `HoldNotFound`, `NotOwner`, `HoldExpired`, `SlotConflict` (rollback, dữ liệu giữ nguyên, không tạo booking) |
+| **Nhả chỗ** | `BookingService.releaseHold(userId, holdId)` | UI (`UI-07`) đọc 3 trạng thái `Releasing`, `ReleaseFailed`, `Released` trực tiếp từ phản hồi API `#12` (`releaseHold` / `getActiveHold`). Tác vụ nền `ReleaseJob` gọi `BookingService.releaseExpiredHolds(now)`. | `Released` (hold sang `Released`, slot về `Available`) | `Releasing` (đang xử lý, chờ), `ReleaseFailed` (báo lỗi, giữ màn hình), `NotOwner` |
+| **Người chơi hủy lượt đặt** | `BookingService.cancelBookingByPlayer(userId, bookingId, reason?)` | `reason` là tham số **tùy chọn** (`reason?: String`), có thể bỏ trống. Hủy toàn bộ đơn, đúng mốc $\ge 3$ giờ (FR-28, AC-26, AC-27). Chủ sân hủy do khóa slot đi qua `cancelAffected(confirmedBookings, reason)` ($\ge 24$ giờ, FR-29, AC-28, AC-29). | `Booking` (`CANCELLED_BY_PLAYER`) | `BookingNotFound`, `NotOwner`, `CancelDeadlinePassed` ($< 3$ giờ), `InvalidState` (booking không ở `CONFIRMED`) |
 
 ### 8.2 Danh sách đầy đủ các operation theo lớp
 
 | Lớp | Operation | Truy vết sơ đồ |
 | ----- | ----- | ----- |
-| **BookingController** | `proceedToBooking(facilityId, selections)`; `confirmBooking(holdId)`; `cancelBooking(bookingId)`; `releaseHold(holdId)`; `getActiveHold()`; `getHoldStatus(holdId)` | `SEQ-01`, `SEQ-02`, `SEQ-02B`, `SEQ-03`, `SEQ-05` |
+| **BookingController** | `proceedToBooking(facilityId, selections)`; `confirmBooking(holdId)`; `cancelBooking(bookingId, reason?)`; `releaseHold(holdId)`; `getActiveHold()` | `SEQ-01`, `SEQ-02`, `SEQ-02B`, `SEQ-03`, `SEQ-05` |
 | **FacilityController** | `previewBlock(courtId, period)`; `confirmBlock(courtId, period, confirmedBookings)` (và hai điểm vào tương ứng cho đổi giờ hoạt động, xóa sân) | `SEQ-04`, `SEQ-04B` |
 | **AuthService** | `verifySession()`; `verifyFacilityOwner(userId, facilityId)` | `SEQ-01`, `SEQ-04`, `SEQ-05` |
-| **BookingService** | `createHold(userId, actorRole, facilityId, selections, isDirect)`; `confirmBooking(holdId, userId)`; `cancelBooking(bookingId, userId)`; `cancelAffected(confirmedBookings, reason)` | `SEQ-01`, `SEQ-02`, `SEQ-03`, `SEQ-04`, `SEQ-05` |
-| **HoldService** | `getHoldForUpdate(holdId)`; `releaseHold(holdId, userId)`; `getActiveHold(userId)`; `getHoldStatus(holdId, userId)` (trả `Released`, `Releasing` hoặc `ReleaseFailed`); `releaseExpiredHolds(now)` | `SEQ-02`, `SEQ-02B` |
+| **BookingService** | `createHold(userId, actorRole, facilityId, selections, isDirect)`; `confirmBooking(userId, holdId, isDirect)`; `releaseHold(userId, holdId)`; `getActiveHold(userId)` (trả `Released`, `Releasing` hoặc `ReleaseFailed`); `releaseExpiredHolds(now)`; `cancelBookingByPlayer(userId, bookingId, reason?)`; `cancelAffected(confirmedBookings, reason)` | `SEQ-01`, `SEQ-02`, `SEQ-02B`, `SEQ-03`, `SEQ-04`, `SEQ-05` |
 | **ScheduleService** | `validateSelection(facilityId, selections, actorRole, isDirect, now)`; `recheckAvailability(items)`; `previewChange(change, now)`; `applyChange(change, confirmedBookings, now)` | `SEQ-01`, `SEQ-02`, `SEQ-04`, `SEQ-04B`, `SEQ-05` |
 | **NotificationService** | `notify(players, reason, booking, slots)` | `SEQ-04`, `SEQ-04B` |
 | **ReleaseJob** (tác vụ nền) | gọi `releaseExpiredHolds(now)` theo chu kỳ không quá 1 giây | `SEQ-02B` |
@@ -447,8 +452,6 @@ UC-12 (đổi giờ hoạt động hoặc xóa sân) không có sơ đồ riêng
 
   * \[x\] Đã bao phủ đủ UC-05, UC-06, UC-08, UC-11, UC-13 và bảng so sánh UC-12; có luồng `alt` ở mọi sơ đồ.
 
-  * \[x\] Đã đồng bộ lời gọi giữ chỗ sang `BookingService.createHold(userId, actorRole, facilityId, selections, isDirect)` ở `SEQ-01` (`isDirect = false`), `SEQ-05` (`isDirect = true` sau `verifyFacilityOwner`) và bảng `SEQ-OPS`, khớp với Mục 3.2 (`CLS-08`) trong PR `#31`.
-
   * \[x\] Bước kiểm tra xung đột và ghi hold (`SEQ-01`, `SEQ-05`) và bước kiểm tra, ghi khi xác nhận (`SEQ-02`) nằm trong cùng một transaction; có nhánh thua yêu cầu cùng lúc và nhánh từ chối xác nhận khi hết hạn giữ nguyên dữ liệu lượt đặt (FR-11, AC-35).
 
   * \[x\] `SEQ-02B` thể hiện hết hạn, nhả (kể cả nhả lỗi), hủy, tải lại và đóng tab; mọi operation trong `SEQ-OPS` đều được sơ đồ dùng.
@@ -459,20 +462,19 @@ UC-12 (đổi giờ hoạt động hoặc xóa sân) không có sơ đồ riêng
 
   * \[x\] Đã mở từng khối Mermaid trên preview GitHub (hoặc mermaid.live) và không có lỗi cú pháp.
 
-  * \[x\] Đã xuất lại ảnh `sd-1-uc05.png` và `sd-5-uc13.png` từ nguồn Mermaid đã cập nhật.
 
 * **Các quyết định thiết kế chính:**
 
-  1. Đồng bộ điểm vào tạo hold tại `BookingService.createHold(userId, actorRole, facilityId, selections, isDirect)` (khớp `CLS-08` ở PR `#31`), phối hợp `ScheduleService` kiểm tra luật lựa chọn và `HoldService` quản lý vòng đời giữ chỗ 5 phút / giải phóng; việc ghi hold, xác nhận và áp dụng thay đổi lịch đều nguyên tử (đối chiếu với `#10`).
+  1. Đồng bộ điểm vào tạo hold tại `BookingService.createHold(userId, actorRole, facilityId, selections, isDirect)` (khớp `CLS-08` ở PR `#31`), phối hợp `ScheduleService` kiểm tra luật lựa chọn; `BookingService` thực hiện trực tiếp cả vòng đời giữ chỗ 5 phút / giải phóng (không còn lớp trung gian `HoldService`), mọi thao tác theo chuẩn tham số đầu là `userId`; việc ghi hold, xác nhận và áp dụng thay đổi lịch đều nguyên tử (đối chiếu với `#10`).
 
   2. Mẫu 2 bước (`previewChange` -> `applyChange` kèm kiểm tra lại trong transaction) cho UC-11 và UC-12, với `change` là tham số chung. Chỉ hủy đúng danh sách đã được chủ sân xác nhận và kiểm tra lại; danh sách đổi thì trả danh sách mới để xác nhận lại.
 
   3. Từ chối xác nhận dựa vào `expiresAt` chứ không phụ thuộc tác vụ nhả; tác vụ nền chỉ nhả slot.
 
-* **Điểm còn mở và liên kết đối chiếu (theo phân công tạm thời):**
+* **Điểm còn mở và liên kết đối chiếu :**
 
   * `@Lysivi2005` (phụ trách Class Diagram `#31`, API `#12`, UI `#29`):
-    * Đã thống nhất chữ ký `BookingService.createHold(userId, actorRole, facilityId, selections, isDirect)` và bảng 4 thao tác tại Mục 8.1 với Mục 3.2 (`CLS-08`) của PR `#31`.
-    * Đối chiếu cách trả ba kết quả giải phóng giữ chỗ (`Releasing`, `ReleaseFailed`, `Released`) trong đặc tả giao tiếp API `#12` (Task 3.1.4) và cách UI ở PR `#29` (Task 3.2.1) xử lý từng kết quả (giao diện chỉ cho chọn lại sau khi nhận `Released`).
+    * Đã thống nhất chữ ký `BookingService.createHold(userId, actorRole, facilityId, selections, isDirect)`, `confirmBooking(userId, holdId, isDirect)`, `releaseHold(userId, holdId)`, `cancelBookingByPlayer(userId, bookingId, reason?)` và bảng 4 thao tác tại Mục 8.1 với Mục 3.2 (`CLS-08`) của PR `#31`.
+    * Đối chiếu cách trả ba kết quả giải phóng giữ chỗ (`Releasing`, `ReleaseFailed`, `Released`) qua `releaseHold` / `getActiveHold` trong đặc tả giao tiếp API `#12` (Task 3.1.4) và cách UI ở PR `#29` (Task 3.2.1) xử lý từng kết quả (giao diện chỉ cho chọn lại sau khi nhận `Released`).
   * Thiết kế dữ liệu `#10` (Task 3.1.2 — `@nmt1206` phụ trách): đã đối chiếu ranh giới giao dịch ở `createHoldAtomically`, `confirmBooking`, `cancelBooking`, `applyChange` tại mục `DB-TXN-01`..`05`.
   * `@buikhoa130406` (phụ trách thử kết nối `#7` — Task 2.3.1): kiểm chứng chu kỳ nhả không quá 1 giây; mốc giải phóng 5 giây cần bằng chứng đo riêng.
