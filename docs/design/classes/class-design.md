@@ -346,14 +346,16 @@ classDiagram
 | `NotificationService` (`SEQ-OPS`) | `In-App Notification Module` (`3.1.1`) được `OwnerScheduleService` gọi để tạo bản ghi `Notification` (`CLS-07`) trong Transaction |
 | `ReleaseJob` (`SEQ-OPS`) | `Hold Expiry Worker` (`3.1.1`) gọi `BookingService.releaseExpiredHolds(now)` |
 
-**Đề xuất Hợp đồng Chữ ký & Kết quả lỗi thống nhất giữa `class-design.md` (`3.3.2`) và `sequence-diagrams.md` (`3.3.3`):**
+**Hợp đồng Chữ ký & Kết quả lỗi thống nhất giữa `class-design.md` (`3.3.2`, PR `#31`) và `sequence-diagrams.md` (`3.3.3`, [PR #27](https://github.com/buikhoa130406/se-project-t04/pull/27)):**
 
-| Luồng | Chữ ký thống nhất đề xuất | Đầu ra thành công | Kết quả lỗi nghiệp vụ thống nhất |
-|---|---|---|---|
-| **Giữ chỗ (`UC-05`, `UC-13`)** | `createHold(userId, actorRole, facilityId, selections, isDirect)` | `SlotHold` (`ACTIVE`, `expiresAt`) | `SelectionInvalid(code: NOT_SINGLE_FACILITY \| INVALID_SEQUENCE \| OUTSIDE_HOURS \| TOO_LATE_60M \| SLOT_CONFLICT, conflictSlots[])` hoặc `NotOwner` nếu `isDirect=true` không hợp lệ |
-| **Xác nhận (`UC-06`, `UC-13`)** | `confirmBooking(userId, holdId, isDirect)` | `Booking` (`CONFIRMED`, `isDirectBooking`) | `ConfirmRejected(code: HOLD_NOT_FOUND \| NOT_OWNER \| HOLD_EXPIRED \| SLOTS_INVALID)` |
-| **Nhả giữ chỗ (`UC-06`)** | `releaseHold(userId, holdId)` / `releaseExpiredHolds(now)` | `HoldStatus.RELEASED` | `ReleaseFailed(code: HOLD_NOT_FOUND \| NOT_OWNER \| RELEASE_ERROR)` (nếu nền lỗi: giữ `EXPIRED`, thử lại chu kỳ sau) |
-| **Hủy đơn (`UC-08`)** | `cancelBookingByPlayer(userId, bookingId, reason)` | `Booking` (`CANCELLED_BY_PLAYER`) | `CancelNotAllowed(code: BOOKING_NOT_FOUND \| NOT_OWNER \| INVALID_STATE \| UNDER_3_HOURS)` |
+- **Quy ước chung:** Mọi thao tác trên `BookingService` đều nhận **`userId` làm tham số đầu tiên** (`BookingService` thực hiện trực tiếp; nếu `SEQ-OPS` giữ tên `HoldService` thì ánh xạ 1–1 sang các phương thức tương ứng của `BookingService`).
+
+| Luồng | Lớp & Chữ ký thống nhất | Nguồn ngữ cảnh / Ghi chú | Đầu ra thành công | Kết quả lỗi nghiệp vụ thống nhất |
+|---|---|---|---|---|
+| **Giữ chỗ (`UC-05`, `UC-13`)** | `BookingService.createHold(userId, actorRole, facilityId, selections, isDirect)` | Người chơi qua app: `isDirect = false`. Đặt tại quầy: `OwnerScheduleService` kiểm tra `Facility.isOwnedBy(ownerId)` xong mới truyền `isDirect = true` (`AC-25`). | `SlotHold` (`ACTIVE`, `expiresAt`) | `SelectionInvalid(code: NOT_SINGLE_FACILITY \| INVALID_SEQUENCE \| OUTSIDE_HOURS \| TOO_LATE_60M \| SLOT_CONFLICT, conflictSlots[])` hoặc `NotOwner` nếu `isDirect=true` không hợp lệ |
+| **Xác nhận (`UC-06`, `UC-13`)** | `BookingService.confirmBooking(userId, holdId, isDirect)` | `isDirect` mặc định `false` với người chơi; với đặt tại quầy được truyền `true` từ `OwnerScheduleService` sau khi xác minh quyền sở hữu (và đối chiếu khớp `SlotHold`). | `Booking` (`CONFIRMED`, `isDirectBooking`) | `ConfirmRejected(code: HOLD_NOT_FOUND \| NOT_OWNER \| HOLD_EXPIRED \| SLOTS_INVALID)` (giữ nguyên dữ liệu `Booking`) |
+| **Nhả giữ chỗ (`UC-06`)** | `BookingService.releaseHold(userId, holdId)` / `releaseExpiredHolds(now)` | Giao diện (`UI-07`) đọc 3 kết quả `Releasing`, `ReleaseFailed`, `Released` trực tiếp từ phản hồi API `#12` (`POST /holds/:id/release` hoặc `GET /holds/active`). | `Released` (`HoldStatus.RELEASED`) | `Releasing` (đang xử lý, chờ), `ReleaseFailed(code: HOLD_NOT_FOUND \| NOT_OWNER \| RELEASE_ERROR)` (nếu nền lỗi: giữ `EXPIRED`, thử lại chu kỳ sau) |
+| **Hủy đơn (`UC-08`)** | `BookingService.cancelBookingByPlayer(userId, bookingId, reason?)` | `reason?: String` là tham số **tùy chọn** (có thể để trống). | `Booking` (`CANCELLED_BY_PLAYER`) | `CancelNotAllowed(code: BOOKING_NOT_FOUND \| NOT_OWNER \| INVALID_STATE \| UNDER_3_HOURS)` |
 
 ---
 
@@ -365,4 +367,4 @@ classDiagram
   - [x] Làm rõ cách `createDirectBooking` truyền `isDirect = true` sau khi kiểm tra quyền sở hữu để miễn mốc 60 phút cho đặt tại quầy (`AC-25`).
   - [x] Đưa bảng hợp đồng chữ ký và mã lỗi cho đủ 4 luồng (giữ, xác nhận, nhả, hủy) để thống nhất cùng `@nmt1206`.
 - **Điểm cần người kiểm tra xác nhận:**
-  - `@nmt1206` (Trí — đầu mối dữ liệu `#10`) & `@Lysivi2005` (Vĩ — đầu mối API `#12`): thống nhất phương án chữ ký chung cho `createHold`, xác nhận (`confirmBooking`), nhả (`releaseHold`), hủy (`cancelBookingByPlayer`) cùng kết quả lỗi trong API `#12`, sau đó cập nhật đồng bộ cả **PR #27** (`SEQ-OPS`) và **PR #31** (`3.3.2`).
+  - `@nmt1206` (Trí — đầu mối dữ liệu `#10`) & `@Lysivi2005` (Vĩ — đầu mối API `#12`): đối chiếu bảng chữ ký mục 3.2 (gồm `createHold`, `confirmBooking`, `releaseHold`, `cancelBookingByPlayer`, nguồn `isDirect`, nơi đọc `Releasing`/`ReleaseFailed`/`Released` ở API `#12`, `reason?` tùy chọn) giữa **PR #31** (`3.3.2`) và [PR #27](https://github.com/buikhoa130406/se-project-t04/pull/27) (`SEQ-OPS`).
