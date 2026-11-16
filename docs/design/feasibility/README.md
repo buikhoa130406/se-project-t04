@@ -52,6 +52,6 @@ Nếu `db:init` báo lỗi, kiểm tra PostgreSQL đang chạy, tên database, t
 | Lưu từ React và tải lại trang | Lưu **95.000 đồng**. Sau khi tải lại, React đọc **95.000 đồng** và truy vấn SQL xác nhận cùng kết quả. |
 | Kiểm tra build frontend | `npm.cmd run build` thành công. |
 
-Khoa và Vĩ có thể chạy lại theo các bước trên và ghi thời điểm, giá ban đầu, giá sau khi lưu và giá sau khi tải lại.
+Ngày **17/11/2026**, Khoa xác nhận đã tự chạy thử thành công luồng lưu giá và tải lại trang qua giao diện trong Codex. Vĩ có thể chạy lại theo hướng dẫn trên để kiểm tra độc lập.
 
 Thử nghiệm dùng bảng và dữ liệu mẫu riêng. Phạm vi gồm kết nối HTTP, đọc, ghi và giữ giá sau khi tải lại. Kiểm tra phân quyền, tranh chấp đặt sân, thời gian nhả chỗ và tích hợp với schema PA3 được thực hiện riêng.
