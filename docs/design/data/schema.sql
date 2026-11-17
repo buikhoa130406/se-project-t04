@@ -18,7 +18,8 @@ CREATE TYPE entry_type          AS ENUM ('HOLD', 'BOOKING', 'BLOCK');
 CREATE TYPE owner_change_reason AS ENUM ('BLOCKED_PERIOD', 'HOURS_CHANGED', 'COURT_DELETED');
 
 -- ---------- Người dùng ----------
--- Đồng bộ với API-AUTH (#34): tách email (định danh đăng nhập) và phone bắt buộc riêng.
+-- Đồng bộ với API-AUTH (#34): tách email (định danh đăng nhập) và phone bắt buộc riêng;
+-- role dùng thống nhất 'PLAYER' | 'FACILITY_OWNER' xuyên suốt DB, API (#34) và Class Diagram (#31).
 CREATE TABLE app_user (
     id            bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     name          text        NOT NULL CHECK (length(btrim(name)) > 0),
@@ -125,8 +126,10 @@ CREATE TABLE booking (
 );
 
 -- ---------- Lịch chung: mọi thứ chiếm thời gian của một sân ----------
--- Một dòng = một sân + một dải slot 30 phút liên tiếp, thuộc về HOLD, BOOKING hoặc BLOCK.
--- Cột unit_price chụp đơn giá 1 slot 30 phút lúc tạo hold để tính totalPrice nhất quán (#34).
+-- Một dòng = một sân + một dải slot 30 phút liên tiếp có cùng đơn giá, thuộc về HOLD, BOOKING hoặc BLOCK.
+-- Cột unit_price chụp đơn giá 1 slot 30 phút (theo effective_from <= slot.startTime) lúc tạo hold
+-- để tính totalPrice nhất quán (#34). Nếu dải chọn trên 1 sân đi qua mốc đổi giá effective_from,
+-- hệ thống tách thành các dải con theo từng mức giá nên dùng UNIQUE (hold_id, court_id, start_time).
 CREATE TABLE schedule_entry (
     id          bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     court_id    bigint        NOT NULL,
@@ -146,8 +149,16 @@ CREATE TABLE schedule_entry (
     FOREIGN KEY (booking_id, facility_id) REFERENCES booking (id, facility_id),
 
     CHECK (end_time > start_time),
-    CHECK (EXTRACT(EPOCH FROM start_time)::bigint % 1800 = 0),        -- bội của 30 phút
-    CHECK (EXTRACT(EPOCH FROM end_time)::bigint   % 1800 = 0),
+    -- Kiểm tra mốc 30 phút chính xác tuyệt đối đến từng micro-giây ở cả start_time và end_time
+    -- (không ép ::bigint làm mất phần thập phân gây lọt trường hợp lệch 250 ms):
+    CHECK (
+        start_time = date_trunc('minute', start_time)
+        AND EXTRACT(MINUTE FROM start_time)::int % 30 = 0
+    ),
+    CHECK (
+        end_time = date_trunc('minute', end_time)
+        AND EXTRACT(MINUTE FROM end_time)::int % 30 = 0
+    ),
     CHECK (
         (entry_type = 'HOLD'    AND hold_id IS NOT NULL AND booking_id IS NULL     AND blocked_by IS NULL     AND unit_price IS NOT NULL) OR
         (entry_type = 'BOOKING' AND hold_id IS NOT NULL AND booking_id IS NOT NULL AND blocked_by IS NULL     AND unit_price IS NOT NULL) OR
@@ -155,7 +166,7 @@ CREATE TABLE schedule_entry (
     ),
     CHECK (is_active OR entry_type <> 'BLOCK'),                       -- không có thao tác gỡ khóa (DB-ASM-07)
 
-    UNIQUE (hold_id, court_id),                                        -- mỗi sân tối đa một dải trong một hold
+    UNIQUE (hold_id, court_id, start_time),                            -- cho phép tách dải khi qua mốc đổi giá trên cùng sân
 
     -- Chống trùng: hai dòng đang hoạt động của cùng một sân không được chồng lấn thời gian.
     CONSTRAINT schedule_entry_no_overlap
@@ -166,15 +177,21 @@ CREATE TABLE schedule_entry (
 );
 
 -- ---------- Thông báo trong ứng dụng ----------
--- Đồng bộ với API-NTF (#34): có cột is_read phục vụ lọc unreadOnly và PATCH /notifications/:id/read.
+-- Đồng bộ với API-NTF (#34):
+-- 1) Có cột is_read phục vụ lọc unreadOnly, unreadCount và PATCH /notifications/:id/read.
+-- 2) Có cột affected_items (jsonb) chụp danh sách các sân và khung giờ THỰC SỰ bị ảnh hưởng
+--    ngay tại lúc áp dụng thay đổi (applyScheduleChange) để khi hủy cả đơn nhiều sân, thông báo
+--    chỉ trả về đúng phần bị tác động (FR-30).
 CREATE TABLE notification (
-    id         bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    user_id    bigint              NOT NULL REFERENCES app_user (id) ON DELETE RESTRICT,
-    booking_id bigint              REFERENCES booking (id) ON DELETE RESTRICT,
-    reason     owner_change_reason NOT NULL,
-    message    text                NOT NULL,
-    is_read    boolean             NOT NULL DEFAULT false,
-    created_at timestamptz         NOT NULL DEFAULT now()
+    id             bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    user_id        bigint              NOT NULL REFERENCES app_user (id) ON DELETE RESTRICT,
+    booking_id     bigint              NOT NULL REFERENCES booking (id)  ON DELETE RESTRICT,
+    reason         owner_change_reason NOT NULL,
+    message        text                NOT NULL,
+    affected_items jsonb               NOT NULL DEFAULT '[]'::jsonb,
+    is_read        boolean             NOT NULL DEFAULT false,
+    created_at     timestamptz         NOT NULL DEFAULT now(),
+    CHECK (jsonb_typeof(affected_items) = 'array' AND jsonb_array_length(affected_items) > 0)
 );
 
 -- ---------- Chỉ mục (gắn với truy vấn Q1..Q10 trong README) ----------

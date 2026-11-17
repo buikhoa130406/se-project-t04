@@ -8,11 +8,11 @@
 
 * **Nguồn DDL:** `schema.sql` (PostgreSQL 16). Bảng dưới được sinh trực tiếp từ cơ sở dữ liệu đã nạp `schema.sql`, nên kiểu, NULL, mặc định, ràng buộc và chỉ mục khớp với DDL.
 
-Quy ước: `PK` khóa chính, `FK` khóa ngoại, `UQ` duy nhất, `CK` ràng buộc CHECK, `EX` ràng buộc loại trừ (exclusion). Thời điểm dùng `timestamptz` (UTC); ngày và giờ mở cửa tính theo Asia/Ho_Chi_Minh ở tầng ứng dụng. Trên hợp đồng API `#34`, các khóa `bigint` được truyền dưới dạng chuỗi số nguyên dương (`string`).
+Quy ước: `PK` khóa chính, `FK` khóa ngoại, `UQ` duy nhất, `CK` ràng buộc CHECK, `EX` ràng buộc loại trừ (exclusion). Thời điểm dùng `timestamptz` (UTC); ngày và giờ mở cửa tính theo Asia/Ho_Chi_Minh ở tầng ứng dụng. Trong PostgreSQL dùng kiểu `bigint` (`GENERATED ALWAYS AS IDENTITY`), đồng bộ trực tiếp với đặc tả API `#34` (truyền chuỗi số nguyên hoặc số nguyên 64-bit theo quy ước `#34`, ở tầng SQL luôn ép kiểu `$1::bigint`).
 
 ## DB-TBL-01: `app_user`
 
-Tài khoản đăng nhập; mỗi tài khoản một vai trò (DB-ASM-05). Đồng bộ với `API-AUTH` (`#34`): tách riêng `email` (dùng để đăng nhập) và `phone` bắt buộc.
+Tài khoản đăng nhập; mỗi tài khoản một vai trò (DB-ASM-05). Đồng bộ với `API-AUTH` (`#34`) và `CLS-01` (`#31`): tách riêng `email` (dùng để đăng nhập) và `phone` bắt buộc; dùng thống nhất tên vai trò `PLAYER` | `FACILITY_OWNER`.
 
 * **Khái niệm miền:** DM-ENT-01 (`CLS-01`)
 
@@ -25,7 +25,7 @@ Tài khoản đăng nhập; mỗi tài khoản một vai trò (DB-ASM-05). Đồ
 | `email` | `text` | NOT NULL |  | UQ | Địa chỉ email dùng để đăng nhập và kiểm tra trùng (`API-AUTH` `#34`); duy nhất. | 
 | `phone` | `text` | NOT NULL |  | UQ | Số điện thoại liên hệ bắt buộc khi đăng ký (`API-AUTH` `#34`); duy nhất. | 
 | `password_hash` | `text` | NOT NULL |  |  | Mật khẩu đã băm; không bao giờ lưu plaintext (NFR-05). | 
-| `role` | `user_role` | NOT NULL |  |  | Vai trò duy nhất của tài khoản: `PLAYER` hoặc `FACILITY_OWNER` (API `#34` ánh xạ `FACILITY_OWNER` ↔ `OWNER`). | 
+| `role` | `user_role` | NOT NULL |  |  | Vai trò duy nhất của tài khoản: `PLAYER` hoặc `FACILITY_OWNER` (dùng thống nhất trên cả DB và API `#34`). | 
 | `created_at` | `timestamp with time zone` | NOT NULL | `now()` |  | Thời điểm tạo tài khoản. | 
 
 **Ràng buộc:**
@@ -202,7 +202,7 @@ Sân con trong cơ sở. Xóa mềm (`status`) để giữ lịch sử booking (
 
 ## DB-TBL-08: `court_price`
 
-Giá của sân theo thời điểm hiệu lực; mỗi sân có một hoặc nhiều dòng giá, dòng mới nhất có `effective_from <= clock_timestamp()` là giá đang áp dụng và được chụp vào `schedule_entry.unit_price` khi tạo hold (DB-ASM-09).
+Giá của sân theo thời điểm hiệu lực; mỗi sân có một hoặc nhiều dòng giá. Đồng bộ với `#34` (§2.2): mỗi slot 30 phút áp mức giá từ dòng mới nhất có `effective_from <= slot.startTime`, và đơn giá đó được chụp vào `schedule_entry.unit_price` khi tạo hold (DB-ASM-09).
 
 * **Khái niệm miền:** DM-ENT-06
 
@@ -313,7 +313,7 @@ Giữ chỗ tạm thời tối đa 5 phút, không gia hạn. Lưu trực tiếp
 
 ## DB-TBL-11: `schedule_entry`
 
-Lịch chung: mỗi dòng là một sân cùng một dải slot 30 phút liên tiếp đang bị chiếm bởi `HOLD`, `BOOKING` hoặc `BLOCK`. Gộp `HoldItem`, `BookingItem` và `BlockedPeriod` để một ràng buộc chống chồng lấn bao phủ cả ba, đồng thời lưu `unit_price` chụp tại thời điểm tạo hold để tính `totalPrice` nhất quán (`#34`).
+Lịch chung: mỗi dòng là một sân cùng một dải slot 30 phút liên tiếp có cùng đơn giá đang bị chiếm bởi `HOLD`, `BOOKING` hoặc `BLOCK`. Gộp `HoldItem`, `BookingItem` và `BlockedPeriod` để một ràng buộc chống chồng lấn bao phủ cả ba, đồng thời lưu `unit_price` chụp tại thời điểm tạo hold (theo `effective_from <= slot.startTime`) để tính `totalPrice` nhất quán (`#34`).
 
 * **Khái niệm miền:** DM-ENT-10, DM-ENT-11, DM-ENT-13 (`CLS-04`)
 
@@ -324,13 +324,13 @@ Lịch chung: mỗi dòng là một sân cùng một dải slot 30 phút liên t
 | `id` | `bigint` | NOT NULL | `identity` | PK | Khóa chính. | 
 | `court_id` | `bigint` | NOT NULL |  | UQ(ghép), FK→court | Sân bị chiếm. | 
 | `facility_id` | `bigint` | NOT NULL |  | FK→booking, FK→court, FK→hold | Cơ sở của sân (cố ý lặp để khóa ngoại ghép buộc hold/booking/sân cùng một cơ sở; xem mục chuẩn hóa). | 
-| `start_time` | `timestamp with time zone` | NOT NULL |  |  | Đầu dải, là bội của 30 phút. | 
-| `end_time` | `timestamp with time zone` | NOT NULL |  |  | Cuối dải (không gồm), là bội của 30 phút, sau `start_time`. Dải = `[start_time, end_time)`. | 
+| `start_time` | `timestamp with time zone` | NOT NULL |  | UQ(ghép) | Đầu dải, tròn phút (`date_trunc('minute', start_time)`) và phút chia hết cho 30. | 
+| `end_time` | `timestamp with time zone` | NOT NULL |  |  | Cuối dải (không gồm), tròn phút (`date_trunc('minute', end_time)`) và phút chia hết cho 30, sau `start_time`. Dải = `[start_time, end_time)`. | 
 | `entry_type` | `entry_type` | NOT NULL |  |  | `HOLD`, `BOOKING` hoặc `BLOCK`. `HOLD` chuyển thành `BOOKING` khi xác nhận. | 
 | `hold_id` | `bigint` | NULL |  | UQ(ghép), FK→hold | Hold gốc (`HOLD` và `BOOKING`); `NULL` với `BLOCK`. | 
 | `booking_id` | `bigint` | NULL |  | FK→booking | Booking (chỉ `BOOKING`); `NULL` với `HOLD` và `BLOCK`. | 
 | `blocked_by` | `bigint` | NULL |  | FK→app_user | Chủ sân tạo khoảng khóa (chỉ `BLOCK`). | 
-| `unit_price` | `numeric(12,0)` | NULL |  |  | Đơn giá 1 slot 30 phút (VND) chụp từ `court_price` tại thời điểm tạo hold (`NOT NULL` với `HOLD` và `BOOKING`, `NULL` với `BLOCK`). Dùng để tính `totalPrice` trên API `#34`. | 
+| `unit_price` | `numeric(12,0)` | NULL |  |  | Đơn giá 1 slot 30 phút (VND) chụp từ `court_price` theo `effective_from <= start_time` tại thời điểm tạo hold (`NOT NULL` với `HOLD` và `BOOKING`, `NULL` với `BLOCK`). Dùng để tính `totalPrice` trên API `#34`. | 
 | `is_active` | `boolean` | NOT NULL | `true` |  | `true` = đang chiếm chỗ. Nhả hold, hủy booking thì chuyển `false` và giữ lại làm lịch sử. `BLOCK` luôn `true` (không có thao tác gỡ khóa, DB-ASM-07). | 
 | `created_at` | `timestamp with time zone` | NOT NULL | `now()` |  | Thời điểm tạo dòng. | 
 
@@ -338,7 +338,7 @@ Lịch chung: mỗi dòng là một sân cùng một dải slot 30 phút liên t
 
 * `schedule_entry_pkey` (PK): `PRIMARY KEY (id)`
 
-* `schedule_entry_hold_id_court_id_key` (UQ): `UNIQUE (hold_id, court_id)`
+* `schedule_entry_hold_id_court_id_start_time_key` (UQ): `UNIQUE (hold_id, court_id, start_time)`
 
 * `schedule_entry_blocked_by_fkey` (FK): `FOREIGN KEY (blocked_by) REFERENCES app_user(id) ON DELETE RESTRICT`
 
@@ -358,9 +358,9 @@ Lịch chung: mỗi dòng là một sân cùng một dải slot 30 phút liên t
 
 * `schedule_entry_unit_price_check` (CK): `CHECK (((unit_price IS NULL) OR (unit_price >= (0)::numeric)))`
 
-* `schedule_entry_end_time_check` (CK): `CHECK ((((EXTRACT(epoch FROM end_time))::bigint % (1800)::bigint) = 0))`
+* `schedule_entry_start_time_check` (CK): `CHECK (((start_time = date_trunc('minute'::text, start_time)) AND (((EXTRACT(minute FROM start_time))::integer % 30) = 0)))`
 
-* `schedule_entry_start_time_check` (CK): `CHECK ((((EXTRACT(epoch FROM start_time))::bigint % (1800)::bigint) = 0))`
+* `schedule_entry_end_time_check` (CK): `CHECK (((end_time = date_trunc('minute'::text, end_time)) AND (((EXTRACT(minute FROM end_time))::integer % 30) = 0)))`
 
 **Chỉ mục (ngoài các chỉ mục do ràng buộc tạo ra):**
 
@@ -368,7 +368,7 @@ Lịch chung: mỗi dòng là một sân cùng một dải slot 30 phút liên t
 
 ## DB-TBL-12: `notification`
 
-Thông báo trong ứng dụng gửi cho người chơi khi chủ sân hủy booking. Có trạng thái đã đọc (`is_read`) đồng bộ với `API-NTF` (`#34`, DB-ASM-08).
+Thông báo trong ứng dụng gửi cho người chơi khi chủ sân hủy booking. Có trạng thái đã đọc (`is_read`) và danh sách các sân/khung giờ thực sự bị ảnh hưởng (`affected_items`) đồng bộ với `API-NTF` (`#34`, DB-ASM-08).
 
 * **Khái niệm miền:** DM-ENT-12 (`CLS-07`)
 
@@ -378,9 +378,10 @@ Thông báo trong ứng dụng gửi cho người chơi khi chủ sân hủy boo
 | ----- | ----- | ----- | ----- | ----- | ----- | 
 | `id` | `bigint` | NOT NULL | `identity` | PK | Khóa chính. | 
 | `user_id` | `bigint` | NOT NULL |  | FK→app_user | Người nhận. | 
-| `booking_id` | `bigint` | NULL |  | FK→booking | Booking liên quan (cho biết sân và slot bị ảnh hưởng qua `schedule_entry`). | 
+| `booking_id` | `bigint` | NOT NULL |  | FK→booking | Booking bị hủy liên quan. | 
 | `reason` | `owner_change_reason` | NOT NULL |  |  | Lý do chuẩn hóa: `BLOCKED_PERIOD`, `HOURS_CHANGED`, `COURT_DELETED` (DB-ASM-04). | 
 | `message` | `text` | NOT NULL |  |  | Nội dung hiển thị. | 
+| `affected_items` | `jsonb` | NOT NULL | `'[]'::jsonb` |  | Mảng JSON `[{"courtId", "courtName", "startTime", "endTime"}]` chụp các sân và khung giờ thực sự bị tác động ngay tại thời điểm áp dụng thay đổi lịch (bảo đảm khi hủy cả đơn nhiều sân chỉ liệt kê đúng phần bị ảnh hưởng, FR-30). | 
 | `is_read` | `boolean` | NOT NULL | `false` |  | Trạng thái đã đọc (`false` = chưa đọc, `true` = đã đọc) phục vụ lọc `unreadOnly` và `PATCH /notifications/:id/read` (`#34`). | 
 | `created_at` | `timestamp with time zone` | NOT NULL | `now()` |  | Thời điểm tạo. | 
 
@@ -391,6 +392,8 @@ Thông báo trong ứng dụng gửi cho người chơi khi chủ sân hủy boo
 * `notification_booking_id_fkey` (FK): `FOREIGN KEY (booking_id) REFERENCES booking(id) ON DELETE RESTRICT`
 
 * `notification_user_id_fkey` (FK): `FOREIGN KEY (user_id) REFERENCES app_user(id) ON DELETE RESTRICT`
+
+* `notification_affected_items_check` (CK): `CHECK (((jsonb_typeof(affected_items) = 'array'::text) AND (jsonb_array_length(affected_items) > 0)))`
 
 **Chỉ mục (ngoài các chỉ mục do ràng buộc tạo ra):**
 
