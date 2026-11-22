@@ -1,6 +1,6 @@
 # PA3 Software Design
 
-Compiled CourtConnect PA3 for team review, 23 November 2026.
+CourtConnect PA3 submitted version for team review, 23 November 2026. Khoa has confirmed uploading the local `04.zip` package; this repository version contains the matching report and design sources.
 
 - [PDF](T04-PA3.pdf)
 - [Editable Word document](T04-PA3-SoftwareDesign.docx)
@@ -34,10 +34,14 @@ The Markdown specifications and figure exports reflect the integrated Word docum
 | Vĩ interface design replacing the undelivered task #12 | #34 (`fe55c40115d3c8fa54d9975c1208598e9e96d7c4`) |
 | Trí data design replacing the undelivered task #10 | #35 (`b4190dde4eae9af03530046b3e1c8a0b2093df02`) |
 
-The contribution assessment is Khoa 30%, Trí 35%, Vĩ 35%, Khôi 0%. The final merge and course submission follow the members' review of this compiled version.
+The contribution assessment is Khoa 30%, Trí 35%, Vĩ 35%, Khôi 0%. The first submission has been made. Members review this same version for important errors or contradictions; accepted corrections can be prepared as an updated submission. The PR remains open for review and is not merged by this update.
 
 ## Integration consistency revision 23 November
 
 Khoa authorised completing the report’s internal consistency without another member-edit cycle. Class/API/sequence terminology and effective-dated pricing are aligned; the current UI figures are PA3 SVG wireframes. FR-26 now specifies volatile presence heartbeat with early release and fixed-expiry fallback. API-01 specifies the separate operational replay table in `docs/design/data/api-request-result.sql`. The twelve-table business schema remains unchanged.
 
 These choices are documented integration work by Khoa and are not described as approved by Trí/Vĩ or implemented/tested runtime features. The updated Word/PDF is 77 pages. The review note records the scope and verification; the feasibility spike is not included in this branch.
+
+## Submitted package check
+
+The local `04.zip` has one `04/` directory containing the PDF, DOCX and 33 source files under `sources/` (35 files total). No README, runtime dependencies, temporary files or feasibility-spike implementation is included. The archive integrity check passed. Both report files match this repository byte for byte; text-source comparisons account for Git line-ending normalization. Package identity and comparison results are recorded in [manifest.json](manifest.json).
