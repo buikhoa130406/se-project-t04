@@ -11,7 +11,7 @@
 
 ### 1.1. Chuẩn giao tiếp, Kiểu ID & Bảo mật
 - **Giao thức:** RESTful JSON qua HTTPS, Base URL `/api/v1`.
-- **Kiểu định danh (đồng bộ `#33`):** Mọi khóa chính (`userId`, `facilityId`, `courtId`, `holdId`, `bookingId`, `notificationId`, `expectedBookingIds[]`) dùng kiểu **`bigint`** (số nguyên dương 64-bit, tương ứng `GENERATED ALWAYS AS IDENTITY` trong `schema.sql`).
+- **Kiểu định danh (đồng bộ `#34` & `#35`):** Mọi khóa chính (`userId`, `facilityId`, `courtId`, `holdId`, `bookingId`, `notificationId`, `expectedBookingIds[]`) lưu ở PostgreSQL (`#35`) là `bigint` (`GENERATED ALWAYS AS IDENTITY`), còn trên JSON và URL của API thống nhất biểu diễn bằng **chuỗi số nguyên (`string`)** (ví dụ `"1"`, `"101"`, `["201"]`) để tránh mất độ chính xác 64-bit trên JavaScript.
 - **Vai trò người dùng (đồng bộ `#33`):** Enum **`"PLAYER" | "FACILITY_OWNER"`**.
 - **Xác thực:** `Authorization: Bearer <jwt>` cho mọi endpoint yêu cầu đăng nhập; `Auth & RBAC Middleware` kiểm tra JWT và vai trò trước khi vào Controller (`NFR-04`).
 - **Định dạng thời gian:** ISO-8601 UTC (`YYYY-MM-DDTHH:mm:ss.sssZ`).
@@ -24,7 +24,7 @@
     "message": "Một hoặc nhiều khung giờ đã được giữ hoặc đặt trước.",
     "details": {
       "conflictedSlots": [
-        { "courtId": 1, "startTime": "2026-11-17T18:00:00.000Z" }
+        { "courtId": "1", "startTime": "2026-11-17T18:00:00.000Z" }
       ]
     },
     "serverNow": "2026-11-16T11:00:00.000Z"
@@ -81,7 +81,7 @@
 | Method & Endpoint | Quyền | Request / Query | Response `200` | Lỗi nghiệp vụ |
 |---|---|---|---|---|
 | `GET /facilities` | Public | `?sportId=&district=&keyword=&amenityIds=&page=&limit=` | `{ items: [{ id, name, address, district, sportId, minPrice, openTime, closeTime }], total }` | `400 VALIDATION_ERROR` |
-| `GET /facilities/:facilityId` | Public | Path `facilityId: bigint` | `{ id, name, address, district, description, sportId, amenities, operatingHours, courts: [{ id, name, status, currentPricePerSlot }] }` | `404 FACILITY_NOT_FOUND` |
+| `GET /facilities/:facilityId` | Public | Path `facilityId: string` (chuỗi `bigint`) | `{ id, name, address, district, description, sportId, amenities, operatingHours, courts: [{ id, name, status, currentPricePerSlot }] }` | `404 FACILITY_NOT_FOUND` |
 | `GET /facilities/:facilityId/schedule` | Public | `?date=YYYY-MM-DD` (mỗi slot chia chuẩn 30 phút, `BR-03`) | `{ date, serverNow, courts: [{ courtId, courtName, slots: [{ startTime, endTime, status: "AVAILABLE" \| "HELD" \| "BOOKED" \| "BLOCKED", price }] }] }` | `404 FACILITY_NOT_FOUND`, `400 INVALID_DATE` |
 
 *(Ghi chú giá hiển thị từ `court_price` `#33`: mỗi slot dùng đơn giá có `effective_from <= slot.startTime` mới nhất; khi tạo Hold, đơn giá được chụp vào `schedule_entry.unit_price` để `totalPrice` không bị biến động trong 5 phút giữ chỗ.)*
@@ -97,10 +97,10 @@
 - **Request Body:**
 ```json
 {
-  "facilityId": 12,
+  "facilityId": "12",
   "selections": [
     {
-      "courtId": 1,
+      "courtId": "1",
       "slotStartTimes": [
         "2026-11-17T18:00:00.000Z",
         "2026-11-17T18:30:00.000Z"
@@ -112,8 +112,8 @@
 - **Response `201 Created`:**
 ```json
 {
-  "holdId": 101,
-  "facilityId": 12,
+  "holdId": "101",
+  "facilityId": "12",
   "source": "APP",
   "isDirect": false,
   "status": "ACTIVE",
@@ -122,8 +122,8 @@
   "expiresAt": "2026-11-16T11:05:00.000Z",
   "serverNow": "2026-11-16T11:00:00.000Z",
   "items": [
-    { "courtId": 1, "startTime": "2026-11-17T18:00:00.000Z", "endTime": "2026-11-17T18:30:00.000Z", "price": 80000 },
-    { "courtId": 1, "startTime": "2026-11-17T18:30:00.000Z", "endTime": "2026-11-17T19:00:00.000Z", "price": 80000 }
+    { "courtId": "1", "startTime": "2026-11-17T18:00:00.000Z", "endTime": "2026-11-17T18:30:00.000Z", "price": 80000 },
+    { "courtId": "1", "startTime": "2026-11-17T18:30:00.000Z", "endTime": "2026-11-17T19:00:00.000Z", "price": 80000 }
   ]
 }
 ```
@@ -138,7 +138,7 @@
 - **`GET /holds/:holdId`:** Endpoint chuyên biệt khi `UI-07` **đã có `holdId`** (ví dụ sau `202 Releasing` hoặc `ReleaseFailed`) để hỏi trạng thái của đúng `holdId` đó, bảo đảm **không trả nhầm lượt giữ ở tab khác**:
   ```json
   {
-    "holdId": 101,
+    "holdId": "101",
     "status": "EXPIRED",
     "releaseState": "Releasing",
     "expiresAt": "2026-11-16T11:05:00.000Z",
@@ -152,7 +152,7 @@
 - **Response `200 OK` (`Released`):**
 ```json
 {
-  "holdId": 101,
+  "holdId": "101",
   "status": "RELEASED",
   "releaseState": "Released",
   "expiresAt": "2026-11-16T11:05:00.000Z",
@@ -160,14 +160,14 @@
 }
 ```
 - **Phản hồi khi đang xử lý hoặc nhả lỗi (đồng bộ `UI-07`, `STM-01`, `SEQ-02B`):**
-  - `202 Accepted`: `{ "holdId": 101, "status": "EXPIRED", "releaseState": "Releasing", "expiresAt": "2026-11-16T11:05:00.000Z", "serverNow": "..." }` $\rightarrow$ `UI-07` **tiếp tục chờ** và poll `GET /holds/101`, chưa cho quay về `UI-06`.
+  - `202 Accepted`: `{ "holdId": "101", "status": "EXPIRED", "releaseState": "Releasing", "expiresAt": "2026-11-16T11:05:00.000Z", "serverNow": "..." }` $\rightarrow$ `UI-07` **tiếp tục chờ** và poll `GET /holds/101`, chưa cho quay về `UI-06`.
   - `503 Service Unavailable`:
     ```json
     {
       "error": {
         "code": "RELEASE_FAILED",
         "message": "Chưa giải phóng được khung giờ.",
-        "details": { "holdId": 101, "status": "EXPIRED", "releaseState": "ReleaseFailed" },
+        "details": { "holdId": "101", "status": "EXPIRED", "releaseState": "ReleaseFailed" },
         "serverNow": "2026-11-16T11:05:06.000Z"
       }
     }
@@ -205,23 +205,23 @@
 
 3. **Thay đổi lịch $\ge 24\text{h}$ (`UC-11`, `UC-12`, `SEQ-04`, `UI-14`):**
    - `POST /owner/facilities/:facilityId/schedule-changes/preview`: `change = { type: "BLOCK" | "OPERATING_HOURS" | "DELETE_COURT", courtId?, startTime?, endTime?, operatingHours?, reason? }`.
-   - `POST /owner/facilities/:facilityId/schedule-changes/apply` (`Idempotency-Key`): nhận `{ change, expectedBookingIds: bigint[] }`.
+   - `POST /owner/facilities/:facilityId/schedule-changes/apply` (`Idempotency-Key`): nhận `{ change, expectedBookingIds: string[] }` (mảng chuỗi số nguyên biểu diễn `bigint`).
    - **Cấu trúc dùng chung** cho cả response `200` của `preview` và lỗi `409 AFFECTED_BOOKINGS_CHANGED` của `apply` (hiển thị đủ từng sân/khung giờ bị ảnh hưởng trên `UI-14`):
      ```json
      {
        "affectedBookings": [
          {
-           "bookingId": 201,
-           "playerId": 45,
+           "bookingId": "201",
+           "playerId": "45",
            "playerName": "Nguyễn Văn A",
            "earliestStartTime": "2026-11-18T18:00:00.000Z",
            "totalPrice": 160000,
            "affectedSlots": [
-             { "courtId": 1, "courtName": "Sân 1", "startTime": "2026-11-18T18:00:00.000Z", "endTime": "2026-11-18T18:30:00.000Z" }
+             { "courtId": "1", "courtName": "Sân 1", "startTime": "2026-11-18T18:00:00.000Z", "endTime": "2026-11-18T18:30:00.000Z" }
            ]
          }
        ],
-       "expectedBookingIds": [201],
+       "expectedBookingIds": ["201"],
        "serverNow": "2026-11-16T15:00:00.000Z"
      }
      ```
@@ -237,8 +237,8 @@
   {
     "items": [
       {
-        "id": 501,
-        "bookingId": 201,
+        "id": "501",
+        "bookingId": "201",
         "reason": "BLOCKED_PERIOD",
         "message": "Chủ sân bảo trì Sân 1.",
         "isRead": false,
@@ -246,7 +246,7 @@
         "affectedSummary": {
           "facilityName": "Sân Cầu Lông T04",
           "affectedItems": [
-            { "courtId": 1, "courtName": "Sân 1", "startTime": "2026-11-18T18:00:00.000Z", "endTime": "2026-11-18T18:30:00.000Z" }
+            { "courtId": "1", "courtName": "Sân 1", "startTime": "2026-11-18T18:00:00.000Z", "endTime": "2026-11-18T18:30:00.000Z" }
           ]
         }
       }
@@ -254,7 +254,7 @@
     "unreadCount": 1
   }
   ```
-- **`PATCH /notifications/:notificationId/read`:** Kiểm tra `notification.user_id === userId`, trả `200`: `{ "id": 501, "isRead": true }`.
+- **`PATCH /notifications/:notificationId/read`:** Kiểm tra `notification.user_id === userId`, trả `200`: `{ "id": "501", "isRead": true }`.
 
 ---
 
