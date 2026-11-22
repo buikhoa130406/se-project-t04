@@ -24,7 +24,7 @@ Figure 4.5. SEQ-02 • Confirm a booking (UC-06).
 
 ### SEQ-02B • Release, expiry and reload (UC-06)
 
-Reload restores the same hold and fixed expiry. When time runs out, confirmation is disabled immediately. The UI waits for Releasing, shows ReleaseFailed if release fails and allows a new selection after Released. Manual cancellation follows the release response. Early detection of tab closure or disconnection falls back to expiry when unavailable.
+Reload restores the same hold and fixed expiry and resumes its heartbeat. Missing presence for 30 seconds permits best-effort early release; unknown presence falls back to fixed expiry. When time runs out, confirmation is disabled immediately. UI-07 waits for Releasing, shows ReleaseFailed on failure and permits a new selection only after Released. Explicit cancellation uses the same release response. API-HOLD defines the presence and restart rules.
 
 Traceability: FR-14, FR-25, FR-26, FR-31 and NFR-03. The five-second release target remains to be measured.
 

@@ -2,9 +2,9 @@
 
 ## Data Diagram
 
-DB-01 • PostgreSQL 16 stores twelve business-data tables. A shared schedule_entry table represents held, booked and blocked ranges, allowing one exclusion constraint to prevent overlap across all three. Logical TimeSlot availability is derived; no slot table is pre-generated. Each hold and booking belongs to one facility, and confirmation converts existing schedule rows without making them temporarily available.
+DB-01 • PostgreSQL 16 stores twelve business-data tables. A shared schedule_entry table represents held, booked and blocked ranges, allowing one exclusion constraint to prevent overlap across all three. Logical TimeSlot availability is derived; no slot table is pre-generated. Each hold and booking belongs to one facility, and confirmation converts existing schedule rows without making them temporarily available. The separate api_request_result operational table is specified in API-01; it is not included in the business-data ERD.
 
-![erd-overview](erd-overview.png)
+![erd-overview](../diagram-sources/output/erd-overview.png)
 
 Figure 5.1. DB-01 • Physical table and key overview.
 
@@ -166,7 +166,7 @@ PA2 references: FR-10, FR-14, FR-21, FR-25, FR-31, BR-01, BR-07, AC-25
 | user_​id | bigint | No / — | FK → app_​user | Owning or receiving account. |
 | facility_​id | bigint | No / — | UQ*, FK → facility | Facility identifier. |
 | source | booking_​source | No / 'APP' | UQ* | APP or IN_PERSON; direct flow is persisted. |
-| status | hold_​status | No / 'ACTIVE' | — | ACTIVE, CONFIRMED, RELEASED or EXPIRED (release still pending). |
+| status | hold_​status | No / 'ACTIVE' | — | ACTIVE, CONFIRMED, RELEASED or EXPIRED (non-confirmable, release pending after expiry or a release request). |
 | created_​at | timestamptz | No / now() | — | Creation timestamp. |
 | expires_​at | timestamptz | No / now() + 5 min | — | Fixed created_at + five minutes. |
 | released_​at | timestamptz | Yes / — | — | Timestamp present only after release. |
@@ -279,9 +279,9 @@ The exclusion constraint waits for a competing transaction: if it commits, the o
 
 Lock the hold FOR UPDATE. Recheck the user, facility ownership for IN_PERSON, persisted source, ACTIVE state and real database time clock_timestamp() < expires_at; now() is unsuitable for the expiry check after waiting on locks. Revalidate active courts and the complete held ranges. Insert one booking inheriting source/facility, mark the hold CONFIRMED and convert its active HOLD rows to BOOKING without releasing them, all in one transaction. At or after expiry, create no booking.
 
-### DB-ATOM-04 • Release and reload
+### DB-REL • Release reload and presence
 
-ReleaseJob runs in the Express process at a designed interval of at most one second. It marks expired ACTIVE holds EXPIRED and then deactivates their schedule rows and marks them RELEASED in a transaction. On failure, retain EXPIRED and release_failed_at for retry. UI mapping is Releasing before completion, ReleaseFailed after an error or more than five seconds, and Released only after successful release. Poll a known hold by ID and user; F5 without an ID restores the active hold, otherwise the most recent EXPIRED/RELEASED hold, preserving isDirect.
+ReleaseJob runs in the Express process at a designed interval of at most one second. It also checks the volatile presence map described in API-HOLD. On fixed expiry or a confirmed release request (explicit or detected abandonment), prevent confirmation and use EXPIRED as the release-pending state. Deactivate all held schedule rows and mark RELEASED atomically. On failure, retain EXPIRED and release_failed_at for retry. UI mapping is Releasing while pending, ReleaseFailed after an error or more than five seconds beyond fixed expiry, and Released only after completion. Poll the known hold by ID and user; reload restores the same owned hold and its fixed expiry, then sends heartbeat. A missing presence record after restart falls back to expiry.
 
 ### DB-ATOM-05 • Player cancellation
 

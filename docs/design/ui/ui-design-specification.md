@@ -6,35 +6,35 @@ CourtConnect has public browsing and authentication screens, player booking scre
 
 | ID | Screen | Description | Use case | Reference |
 | --- | --- | --- | --- | --- |
-| UI-01 | Home | Search entry point for guests and players. | UC-03 | Mockup |
-| UI-02 | Search and filters | Filter facilities by sport, location and amenities. | UC-03 | Mockup |
-| UI-03 | Sign in | Authenticate when proceeding as a guest. | UC-02 | Mockup |
-| UI-04 | Registration | Create an account and return to sign in. | UC-01 | Mockup |
-| UI-05 | Facility details | View facilities, individual courts and pricing. | UC-04 | Mockup |
-| UI-06 | Court and slot selection | View and select consecutive 30-minute slots. | UC-04, UC-05 | Mockup |
-| UI-07 | Hold and confirmation | Review selections and remaining hold time. | UC-05, UC-06 | Mockup |
-| UI-08 | Booking confirmed | Display the confirmed booking result. | UC-06 | Mockup |
-| UI-09 | My bookings | List a player's bookings and their current state. | UC-07 | Mockup |
-| UI-10 | Booking detail and cancellation | View detail and request full cancellation. | UC-07, UC-08 | Mockup |
-| UI-11 | In-app notifications | View booking notices inside the application. | UC-07 | Mockup |
-| UI-12 | Owner dashboard | Navigate to facility and schedule tools. | F05 | Mockup |
-| UI-13 | Facilities, courts and pricing | Manage owned facilities, courts and prices. | UC-09, UC-10 | Mockup |
-| UI-14 | Court schedule | Review availability and proposed schedule changes. | UC-11, UC-12 | Mockup |
-| UI-15 | In-person booking | Enter a booking at the counter on the shared schedule. | UC-13 | Mockup |
+| UI-01 | Home | Search entry point for guests and players. | UC-03 | Wireframe |
+| UI-02 | Search and filters | Filter facilities by sport, location and amenities. | UC-03 | Wireframe |
+| UI-03 | Sign in | Authenticate when proceeding as a guest. | UC-02 | Wireframe |
+| UI-04 | Registration | Create an account and return to sign in. | UC-01 | Wireframe |
+| UI-05 | Facility details | View facilities, individual courts and pricing. | UC-04 | Wireframe |
+| UI-06 | Court and slot selection | View and select consecutive 30-minute slots. | UC-04, UC-05 | Wireframe |
+| UI-07 | Hold and confirmation | Review selections and remaining hold time. | UC-05, UC-06 | Wireframe |
+| UI-08 | Booking confirmed | Display the confirmed booking result. | UC-06 | Wireframe |
+| UI-09 | My bookings | List a player's bookings and their current state. | UC-07 | Wireframe |
+| UI-10 | Booking detail and cancellation | View detail and request full cancellation. | UC-07, UC-08 | Wireframe |
+| UI-11 | In-app notifications | View booking notices inside the application. | UC-07 | Wireframe |
+| UI-12 | Owner dashboard | Navigate to facility and schedule tools. | F05 | Wireframe |
+| UI-13 | Facilities, courts and pricing | Manage owned facilities, courts and prices. | UC-09, UC-10 | Wireframe |
+| UI-14 | Court schedule | Review availability and proposed schedule changes. | UC-11, UC-12 | Wireframe |
+| UI-15 | In-person booking | Enter a booking at the counter on the shared schedule. | UC-13 | Wireframe |
 
-![ui-flow](ui-flow.png)
+![ui-flow](../diagram-sources/output/ui-flow.png)
 
 Figure 6.1. UI-FLOW-01 • Main navigation.
 
 ## Screen Specifications
 
-Figures are PA2 reference mockups. The control specifications define PA3 behavior; payment wording in the mockups is outside the requirements baseline.
+PA3 wireframes use email/password and automatic booking confirmation. Payment, Google sign-in, reviews and chat are outside scope. The controls and API contracts define validation and responses.
 
 ### UI-02 Search and filters
 
-![Trang_UC-03_DanhSach_Va_LocCoSo](../../requirements/UI_Picture/01_Khach_Va_XacThuc/Trang_UC-03_DanhSach_Va_LocCoSo.png)
+![UI-02](wireframes/UI-02.png)
 
-Figure 6.2. UI-02 • PA2 reference mockup.
+Figure 6.2. UI-02 • PA3 wireframe.
 
 | # | Control | Type | Description / validation | Event handling |
 | --- | --- | --- | --- | --- |
@@ -44,9 +44,9 @@ Figure 6.2. UI-02 • PA2 reference mockup.
 
 ### UI-06 Court and slot selection
 
-![Trang_UC-05_ChonSan_KhungGioMaTran](../../requirements/UI_Picture/02_NguoiChoi_DatSan/Trang_UC-05_ChonSan_KhungGioMaTran.png)
+![UI-06](wireframes/UI-06.png)
 
-Figure 6.3. UI-06 • PA2 reference mockup.
+Figure 6.3. UI-06 • PA3 wireframe.
 
 | # | Control | Type | Description / validation | Event handling |
 | --- | --- | --- | --- | --- |
@@ -56,9 +56,9 @@ Figure 6.3. UI-06 • PA2 reference mockup.
 
 ### UI-07 Temporary hold and confirmation
 
-![Trang_UC-05_UC-06_GiuCho5Phut_HoaDon](../../requirements/UI_Picture/02_NguoiChoi_DatSan/Trang_UC-05_UC-06_GiuCho5Phut_HoaDon.png)
+![UI-07](wireframes/UI-07.png)
 
-Figure 6.4. UI-07 • PA2 reference mockup.
+Figure 6.4. UI-07 • PA3 wireframe.
 
 | # | Control | Type | Description / validation | Event handling |
 | --- | --- | --- | --- | --- |
@@ -68,9 +68,9 @@ Figure 6.4. UI-07 • PA2 reference mockup.
 
 ### UI-10 Booking detail and cancellation
 
-![Trang_UC-08_ChiTietDon_HuySan](../../requirements/UI_Picture/02_NguoiChoi_DatSan/Trang_UC-08_ChiTietDon_HuySan.png)
+![UI-10](wireframes/UI-10.png)
 
-Figure 6.5. UI-10 • PA2 reference mockup.
+Figure 6.5. UI-10 • PA3 wireframe.
 
 | # | Control | Type | Description / validation | Event handling |
 | --- | --- | --- | --- | --- |
@@ -79,9 +79,9 @@ Figure 6.5. UI-10 • PA2 reference mockup.
 
 ### UI-14 Owner court schedule
 
-![Trang_UC-11_UC-12_LichSan_KhoaGioBaoTri](../../requirements/UI_Picture/04_ChuSan_QuanLy/Trang_UC-11_UC-12_LichSan_KhoaGioBaoTri.png)
+![UI-14](wireframes/UI-14.png)
 
-Figure 6.6. UI-14 • PA2 reference mockup.
+Figure 6.6. UI-14 • PA3 wireframe.
 
 | # | Control | Type | Description / validation | Event handling |
 | --- | --- | --- | --- | --- |
@@ -91,9 +91,9 @@ Figure 6.6. UI-14 • PA2 reference mockup.
 
 ### UI-15 In-person booking
 
-![Trang_UC-13_NhapLuotDatTrucTiep](../../requirements/UI_Picture/04_ChuSan_QuanLy/Trang_UC-13_NhapLuotDatTrucTiep.png)
+![UI-15](wireframes/UI-15.png)
 
-Figure 6.7. UI-15 • PA2 reference mockup.
+Figure 6.7. UI-15 • PA3 wireframe.
 
 | # | Control | Type | Description / validation | Event handling |
 | --- | --- | --- | --- | --- |
@@ -102,59 +102,59 @@ Figure 6.7. UI-15 • PA2 reference mockup.
 
 ### UI-01 Home and search
 
-![Trang_UC-03_TrangChu_TimKiem](../../requirements/UI_Picture/01_Khach_Va_XacThuc/Trang_UC-03_TrangChu_TimKiem.png)
+![UI-01](wireframes/UI-01.png)
 
-Figure 6.8. UI-01 • PA2 reference mockup.
+Figure 6.8. UI-01 • PA3 wireframe.
 
 ### UI-03 Sign in
 
-![Trang_UC-02_DangNhap](../../requirements/UI_Picture/01_Khach_Va_XacThuc/Trang_UC-02_DangNhap.png)
+![UI-03](wireframes/UI-03.png)
 
-Figure 6.9. UI-03 • PA2 reference mockup.
+Figure 6.9. UI-03 • PA3 wireframe.
 
 ### UI-04 Register
 
-![Trang_UC-01_DangKyTaiKhoan](../../requirements/UI_Picture/01_Khach_Va_XacThuc/Trang_UC-01_DangKyTaiKhoan.png)
+![UI-04](wireframes/UI-04.png)
 
-Figure 6.10. UI-04 • PA2 reference mockup.
+Figure 6.10. UI-04 • PA3 wireframe.
 
 ### UI-05 Facility details and prices
 
-![Trang_UC-04_ChiTietCoSo_BangGia](../../requirements/UI_Picture/02_NguoiChoi_DatSan/Trang_UC-04_ChiTietCoSo_BangGia.png)
+![UI-05](wireframes/UI-05.png)
 
-Figure 6.11. UI-05 • PA2 reference mockup.
+Figure 6.11. UI-05 • PA3 wireframe.
 
 ### UI-08 Booking confirmation
 
-![Trang_UC-06_XacNhanDatSan_ThanhCong](../../requirements/UI_Picture/02_NguoiChoi_DatSan/Trang_UC-06_XacNhanDatSan_ThanhCong.png)
+![UI-08](wireframes/UI-08.png)
 
-Figure 6.12. UI-08 • PA2 reference mockup.
+Figure 6.12. UI-08 • PA3 wireframe.
 
 ### UI-09 My bookings
 
-![Trang_UC-07_SanDaDat_TatCa ](../../requirements/UI_Picture/02_NguoiChoi_DatSan/Trang_UC-07_SanDaDat_TatCa%20.png)
+![UI-09](wireframes/UI-09.png)
 
-Figure 6.13. UI-09 • PA2 reference mockup.
+Figure 6.13. UI-09 • PA3 wireframe.
 
 ### UI-11 In-app notifications
 
-![Trang_UC-07_TrungTamThongBao](../../requirements/UI_Picture/02_NguoiChoi_DatSan/Trang_UC-07_TrungTamThongBao.png)
+![UI-11](wireframes/UI-11.png)
 
-Figure 6.14. UI-11 • PA2 reference mockup.
+Figure 6.14. UI-11 • PA3 wireframe.
 
 ### UI-12 Owner dashboard
 
-![Trang_ChuSan_TongQuanVanHanh](../../requirements/UI_Picture/04_ChuSan_QuanLy/Trang_ChuSan_TongQuanVanHanh.png)
+![UI-12](wireframes/UI-12.png)
 
-Figure 6.15. UI-12 • PA2 reference mockup.
+Figure 6.15. UI-12 • PA3 wireframe.
 
 ### UI-13 Courts and prices
 
-![Trang_UC-09_UC-10_QuanLySanCon_BangGia](../../requirements/UI_Picture/04_ChuSan_QuanLy/Trang_UC-09_UC-10_QuanLySanCon_BangGia.png)
+![UI-13](wireframes/UI-13.png)
 
-Figure 6.16. UI-13 • PA2 reference mockup.
+Figure 6.16. UI-13 • PA3 wireframe.
 
-## Accessibility Checklist (UI-ACC-01)
+## Accessibility Checklist
 
 Contrast: target 4.5:1 or higher. Use text and icons to identify slot states.
 

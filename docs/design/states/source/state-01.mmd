@@ -1,10 +1,10 @@
 stateDiagram-v2
     [*] --> Active : createHold
-    Active --> Confirmed : confirmBooking (các slot còn hợp lệ)
-    Active --> Released : người dùng hủy, quay lại hoặc đổi lựa chọn
-    Active --> Released : đóng tab / mất kết nối (nếu phát hiện sớm)
-    Active --> Expired : quá 5 phút (từ chối confirm ngay)
-    Expired --> Released : trong 5 giây
-    Expired --> Expired : nhả lỗi
+    Active --> Confirmed : confirm before fixed expiry
+    Active --> Released : explicit or detected abandonment; release succeeds
+    Active --> Expired : fixed expiry or release pending
+    state "Expired / release pending (EXPIRED)" as Expired
+    Expired --> Released : transactional release succeeds
+    Expired --> Expired : release failure; retry
     Confirmed --> [*]
     Released --> [*]

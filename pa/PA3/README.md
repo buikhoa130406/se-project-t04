@@ -1,6 +1,6 @@
 # PA3 Software Design
 
-Compiled CourtConnect PA3 for team review, 22 November 2026.
+Compiled CourtConnect PA3 for team review, 23 November 2026.
 
 - [PDF](T04-PA3.pdf)
 - [Editable Word document](T04-PA3-SoftwareDesign.docx)
@@ -35,3 +35,9 @@ The Markdown specifications and figure exports reflect the integrated Word docum
 | Trí data design replacing the undelivered task #10 | #35 (`b4190dde4eae9af03530046b3e1c8a0b2093df02`) |
 
 The contribution assessment is Khoa 30%, Trí 35%, Vĩ 35%, Khôi 0%. The final merge and course submission follow the members' review of this compiled version.
+
+## Integration consistency revision 23 November
+
+Khoa authorised completing the report’s internal consistency without another member-edit cycle. Class/API/sequence terminology and effective-dated pricing are aligned; the current UI figures are PA3 SVG wireframes. FR-26 now specifies volatile presence heartbeat with early release and fixed-expiry fallback. API-01 specifies the separate operational replay table in `docs/design/data/api-request-result.sql`. The twelve-table business schema remains unchanged.
+
+These choices are documented integration work by Khoa and are not described as approved by Trí/Vĩ or implemented/tested runtime features. The updated Word/PDF is 77 pages. The review note records the scope and verification; the feasibility spike is not included in this branch.

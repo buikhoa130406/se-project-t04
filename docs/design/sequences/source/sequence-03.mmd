@@ -1,66 +1,24 @@
 sequenceDiagram
-    actor Player
-    participant ConfirmPage
-    participant BookingController
-    participant BookingService
-    participant ReleaseJob
-    participant Database
-
-    Note over Player,Database: hold đang ở trạng thái Active với expiresAt do server đặt
-
-    alt hold hết hạn 5 phút
-        Note over ConfirmPage: đếm ngược về 0 theo expiresAt của server, hiển thị thông báo hết hạn, khóa nút Confirm trong lúc nhả
-        loop mỗi chu kỳ không quá 1 giây
-            ReleaseJob->>BookingService: releaseExpiredHolds(now)
-            BookingService->>Database: markExpired(holds có expiresAt <= now)
-            BookingService->>Database: releaseSlots(holds vừa hết hạn)
-
-            alt nhả thành công
-                Database-->>BookingService: ok (hold Released, slot Available)
-            else nhả lỗi
-                Database-->>BookingService: error (hold giữ Expired, ghi nhận nhả lỗi, thử lại ở chu kỳ sau)
-            end
-        end
-
-        ConfirmPage->>BookingController: getActiveHold()
-        BookingController->>BookingService: getActiveHold(userId)
-        BookingService->>Database: selectHold(userId)
-        Database-->>BookingService: holdRecord
-        BookingService-->>BookingController: status (Released, Releasing hoặc ReleaseFailed)
-
-        alt status = Released
-            BookingController-->>ConfirmPage: cho chọn lại, cập nhật tình trạng sân
-        else status = Releasing (Expired, đang giải phóng)
-            BookingController-->>ConfirmPage: giữ thông báo hết hạn, tạm khóa Confirm, chưa cho chọn lại, không báo lỗi, hỏi lại trạng thái
-        else status = ReleaseFailed (Expired, nhả lỗi hoặc quá 5 giây)
-            BookingController-->>ConfirmPage: báo lỗi giải phóng, không cho tiếp tục hay chọn lại, tác vụ nền thử lại, hỏi lại trạng thái
-        end
-
-    else người dùng hủy, quay lại hoặc đổi lựa chọn
-        ConfirmPage->>BookingController: releaseHold(holdId)
-        BookingController->>BookingService: releaseHold(userId, holdId)
-        BookingService->>Database: selectHoldForUpdate(holdId)
-        Database-->>BookingService: holdRecord
-
-        alt hold không thuộc user này
-            BookingService-->>BookingController: NotOwner
-            BookingController-->>ConfirmPage: từ chối nhả, dữ liệu không đổi
-        else đúng chủ hold
-            BookingService->>Database: setReleased + releaseSlots (một transaction)
-            Database-->>BookingService: ok
-            BookingService-->>BookingController: Released
-            BookingController-->>ConfirmPage: về màn chọn slot, cập nhật tình trạng sân
-        end
-
-    else tải lại trang
-        ConfirmPage->>BookingController: getActiveHold()
-        BookingController->>BookingService: getActiveHold(userId)
-        BookingService->>Database: selectActiveHold(userId)
-        Database-->>BookingService: hold
-        BookingService-->>BookingController: hold(expiresAt, serverNow)
-        BookingController-->>ConfirmPage: tiếp tục đếm ngược, không đặt lại 5 phút
-
-    else đóng tab hoặc mất kết nối
-        ConfirmPage->>BookingController: releaseHold(holdId) khi rời trang, nếu phát hiện được
-        Note over ConfirmPage,Database: xử lý như nhánh hủy. Nếu không phát hiện được thì hold hết hạn như nhánh đầu
+    participant UI as Hold screen
+    participant C as BookingController
+    participant S as BookingService
+    participant J as ReleaseJob
+    participant DB as PostgreSQL
+    loop UI-07 open, including restoration after reload
+        UI->>C: heartbeat(holdId) every 10 seconds
+        C->>S: heartbeat(userId, holdId)
+        S-->>UI: current status, fixed expiresAt, fresh serverNow
     end
+    alt known presence missing for 30 seconds
+        J->>S: releaseAbandonedHolds(now)
+        S->>DB: lock ACTIVE hold, recheck absence and release all its rows
+        DB-->>S: RELEASED; otherwise release pending and retry
+    else fixed expiry reached (also fallback after process restart)
+        J->>S: releaseExpiredHolds(now)
+        S->>DB: mark EXPIRED, release schedule rows atomically
+        DB-->>S: RELEASED; otherwise retain EXPIRED and retry
+    end
+    UI->>C: getActiveHold(holdId) or releaseHold(holdId)
+    C->>S: getActiveHold(userId, holdId) or releaseHold(userId, holdId)
+    S-->>UI: Releasing / ReleaseFailed / Released
+    Note over UI,DB: Reload preserves the same hold and expiry; unknown presence falls back to expiry. Return to selection only after release.

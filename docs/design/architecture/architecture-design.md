@@ -8,7 +8,7 @@ CourtConnect uses a client–server architecture. A React single-page applicatio
 
 Guests use public search and facility views. Players reserve and cancel their own bookings. Facility owners manage their own facilities, courts and shared schedules, including in-person bookings.
 
-![c4-context](c4-context.png)
+![c4-context](../diagram-sources/output/c4-context.png)
 
 Figure 3.1. C4-CTX • System context.
 
@@ -16,7 +16,7 @@ Figure 3.1. C4-CTX • System context.
 
 The React interface calls the Express process. The Express process serves its API and runs the hold-expiry task. Repositories access the PostgreSQL schedule and account data.
 
-![c4-container](c4-container.png)
+![c4-container](../diagram-sources/output/c4-container.png)
 
 Figure 3.2. C4-CNT • CourtConnect containers.
 
@@ -24,7 +24,7 @@ Figure 3.2. C4-CNT • CourtConnect containers.
 
 The backend separates authentication, facility search, booking and hold management, owner scheduling and in-app notifications. ReleaseJob calls the booking component, which uses repositories to write PostgreSQL. Owner scheduling reuses booking operations for in-person reservations and creates notifications for owner-initiated cancellations.
 
-![c4-component](c4-component.png)
+![c4-component](../diagram-sources/output/c4-component.png)
 
 Figure 3.3. C4-CMP • Express components.
 
@@ -32,7 +32,7 @@ Figure 3.3. C4-CMP • Express components.
 
 Nginx serves the React build and forwards API requests to the Node.js process on cloud Linux. PostgreSQL stores the shared schedule. GitHub Actions runs the Jest checks on repository changes.
 
-![c4-deployment](c4-deployment.png)
+![c4-deployment](../diagram-sources/output/c4-deployment.png)
 
 Figure 3.4. C4-DEP • Deployment and continuous integration.
 

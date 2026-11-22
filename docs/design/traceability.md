@@ -33,7 +33,7 @@ Functional requirements
 | FR-23 | UC-02, UC-05 | SC-02, SC-05, SC-06 | ASR-G4, UI-03, UI-06, SEQ-01 | — |
 | FR-24 | UC-01, UC-02 | SC-01, SC-02 | ASR-G4, C4-CMP, UI-03/04, CLS-01, DB-TBL-01, API-AUTH | — |
 | FR-25 | UC-06 | SC-06 | ASR-G2, ARC-MAP, STM-01, UI-07, CLS-04, SEQ-02B, DB-TBL-09, API-HOLD | — |
-| FR-26 | UC-06 | SC-06 | ASR-G2, STM-01, UI-07, SEQ-02B; early detection to confirm | — |
+| FR-26 | UC-06 | SC-06 | ASR-G2, STM-01, UI-07, SEQ-02B, API-HOLD, DB-REL; authenticated presence heartbeat and expiry fallback | — |
 | FR-27 | UC-05, UC-13 | SC-05, SC-06, SC-12 | ASR-G3, STM-01, UI-06/15, CLS-08, SEQ-01, SEQ-05, API-HOLD, API-OWN | — |
 | FR-28 | UC-08 | SC-08 | ASR-G6, STM-03, UI-10, CLS-05, SEQ-03, DB-TBL-10, API-BOOK | — |
 | FR-29 | UC-11, UC-12 | SC-11 | ASR-G6, DM-INV-07, STM-02/03, UI-14, CLS-08, SEQ-04, SEQ-04B, DB-TBL-07, DB-TBL-10, API-OWN | — |

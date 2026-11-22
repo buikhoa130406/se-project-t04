@@ -1,8 +1,10 @@
 {
   "document": "T04-PA3-SoftwareDesign.docx",
   "pdf": "T04-PA3.pdf",
+  "revision_date": "2026-11-23",
+  "pages": 77,
   "sha256": {
-    "T04-PA3-SoftwareDesign.docx": "22e15dcc62bdb46a125f5fa0049ab9fd9466e9e1705c572a0178bbc413807b2c",
-    "T04-PA3.pdf": "741bc5443ca4316d4bd70e5d0536606aaef31af6ed62142dfe25ad8c19c11ab7"
+    "T04-PA3-SoftwareDesign.docx": "74c57fcf5aa67e906d84227589bc44b131bd80425521066d623874ff63a66091",
+    "T04-PA3.pdf": "9b408454f41cd1ccd7f55c5d40e18cf627a9cb86b54c2e5e2ce42308efd3e857"
   }
 }

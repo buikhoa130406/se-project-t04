@@ -1,6 +1,6 @@
 ## State Machine Diagrams
 
-The state models describe a hold, a slot and a booking. A hold is Active until it is confirmed, released or expires. At expiry, confirmation is refused immediately. The interface distinguishes releasing, release failed and released. Slot availability changes only when the underlying schedule changes.
+The state models describe a hold, a slot and a booking. A hold is Active until confirmed or closed for release. Active maps to ACTIVE, Confirmed to CONFIRMED, Released to RELEASED and Expired to the non-confirmable release-pending EXPIRED state. Missing presence can trigger early release; a failed release request enters the same pending state for retry. At fixed expiry, confirmation is refused immediately. The interface distinguishes Releasing, ReleaseFailed and Released. Slot availability changes only after the underlying schedule transaction completes.
 
 ### Hold lifecycle
 

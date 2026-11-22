@@ -10,13 +10,15 @@ Access control. JWT bearer authentication, role checks and resource ownership ch
 
 Time zone. Timestamps are ISO 8601 UTC values; opening-hour dates and times are interpreted in Asia/Ho_Chi_Minh.
 
-Expiry and reload. The server fixes expiresAt = createdAt + five minutes. Hold responses supply expiresAt and serverNow; the client offsets its countdown from server time and never resets or extends the expiry on reload. It does not release a hold in beforeunload or pagehide.
+Expiry and reload. The server fixes expiresAt = createdAt + five minutes. Hold responses supply expiresAt and serverNow; the client offsets its countdown from server time and never resets or extends expiry on reload. beforeunload and pagehide do not release the hold because they also occur during reload. UI-07 reports presence by authenticated heartbeat; a missing heartbeat permits best-effort early release as specified in API-HOLD.
 
 Scope. Idempotency-Key (UUID v4) applies to hold creation, hold confirmation, both direct-hold steps and schedule-change apply.
 
-Stored record. Records are scoped by (userId, method, path, key), retain requestHash, IN_PROGRESS/COMPLETED, httpStatus and responseBody for at least 24 hours. This storage is an implementation requirement of API-01, separate from the twelve business-data tables in Section 5.
+Stored record. PostgreSQL api_request_result is an operational table separate from the twelve business-data tables in Section 5. Its composite primary key is (user_id, method, path, request_key); it stores request_hash, status, http_status, response_body, created_at and retain_until. request_key is UUID, user_id is bigint, request_hash/method/path/status are text, http_status is smallint, response_body is jsonb and both time fields are timestamptz. Only COMPLETED records have a response status/body. Keep completed results for at least 24 hours; cleanup deletes only records past retain_until.
 
-Completed retry. Replaying a completed request with the same hash returns the original status/body without repeating the transaction.
+Completed retry. Replaying a completed request with the same hash returns its original status/body without repeating the transaction. For a cached hold response, fetch the owned hold again before restoring a countdown; use fresh serverNow and current status, while preserving the original expiresAt.
+
+Atomic execution. Acquire a PostgreSQL transaction-scoped advisory lock for the complete request-key scope without waiting; failure returns IDEMPOTENCY_IN_FLIGHT. With the lock held, reject a different stored request hash or replay an existing completed result. Otherwise insert IN_PROGRESS, execute the business action and record COMPLETED plus its response and retain_until in the same transaction. A crash or database failure rolls back both action and record. A business rejection can be recorded with no business-data changes. This prevents a committed booking without its replay result.
 
 Rejected retry. Another payload with the same key returns 422 IDEMPOTENCY_KEY_REUSED; an in-progress request returns 409 IDEMPOTENCY_IN_FLIGHT.
 
@@ -111,12 +113,14 @@ GET /holds/active restores the current user’s hold after F5 and returns { acti
 | Hold / release state | Meaning | UI-07 action |
 | --- | --- | --- |
 | ACTIVE / None | serverNow < expiresAt. | Continue the original countdown. |
-| EXPIRED / Releasing | Expired and not yet released; no failure recorded and within five seconds of expiry. | Disable Confirm; poll the same hold; wait. |
+| EXPIRED / Releasing | Release has been requested and is pending, including fixed expiry. No failure is recorded; the five-second overdue test applies after expiresAt. | Disable Confirm; poll the same hold; wait. |
 | EXPIRED / ReleaseFailed | Release failed, or over five seconds beyond expiry. | Show error and remain on UI-07; background worker retries. |
 | RELEASED / Released | Release completed; released_at is present. | Return to UI-06 and reload availability. |
 | CONFIRMED / None | Converted atomically to a booking. | Show confirmation rather than a release action. |
 
 POST /holds/:holdId/release calls releaseHold(userId, holdId), with ownership checks. It returns 200 { holdId, status: RELEASED, releaseState: Released, expiresAt, serverNow }, 202 with EXPIRED/Releasing, or 503 RELEASE_FAILED with EXPIRED/ReleaseFailed. A pending or failed release does not permit the UI to behave as though the slots were free.
+
+Presence and early release (FR-26). UI-07 sends POST /holds/:holdId/heartbeat every 10 seconds and immediately after restoring the same hold. Authentication and ownership are required. The response contains status, releaseState, fixed expiresAt and fresh serverNow. The server records lastSeen in a volatile per-hold map in the single Express process; heartbeat never changes expiry. ReleaseJob attempts release after 30 seconds without heartbeat. Heartbeat and early release are serialised per hold, and the worker rechecks presence and ACTIVE status before closing the hold. Reload resumes the same hold within this grace period. A process restart or unknown presence does not imply abandonment: use the original five-minute expiry. Both abandonment and normal expiry use the same transactional release and retry handling. The 10/30-second intervals are design parameters, not measured results.
 
 ### Booking confirmation history and cancellation (API-BOOK)
 
@@ -210,9 +214,9 @@ Responsibility. Whole-booking cancellation at least three hours ahead (SEQ-03).
 
 ReleaseJob → BookingService
 
-Operation. releaseExpiredHolds(now)
+Operation. releaseExpiredHolds(now); releaseAbandonedHolds(now); heartbeat(userId, holdId)
 
-Responsibility. Expiry and retry in the Express process.
+Responsibility. Check fixed expiry and retry release in the Express process. The same worker checks missing presence; heartbeat updates only volatile presence metadata.
 
 OwnerController → OwnerScheduleService
 
