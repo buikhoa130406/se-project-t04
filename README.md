@@ -4,6 +4,7 @@ Dự án môn Introduction to Software Engineering: tìm kiếm sân thể thao,
 
 ## Bắt đầu công việc
 
+- **[PA3 tổng hợp: Word, PDF và nguồn thiết kế để review](pa/PA3/README.md)**
 - **[Hướng dẫn PA3: task, phân công, thứ tự và nơi bàn giao](docs/design/README.md)**
 - **[Quy tắc nhận task, thực hiện và review](docs/management/WORKING_AGREEMENT.md)**
 - [GitHub Project](https://github.com/users/buikhoa130406/projects/1)

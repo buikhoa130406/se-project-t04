@@ -1,0 +1,37 @@
+sequenceDiagram
+    actor Player
+    participant ConfirmPage
+    participant BookingController
+    participant BookingService
+    participant ScheduleService
+    participant Database
+
+    Player->>ConfirmPage: bấm Confirm booking
+    ConfirmPage->>BookingController: confirmBooking(holdId)
+    BookingController->>BookingService: confirmBooking(userId, holdId, isDirect = false)
+    BookingService->>Database: BEGIN transaction
+    BookingService->>Database: selectHoldForUpdate(holdId)
+    Database-->>BookingService: holdRecord hoặc notFound
+
+    alt không tồn tại, thuộc user khác, không còn Active hoặc now >= expiresAt
+        BookingService->>Database: ROLLBACK
+        BookingService-->>BookingController: HoldNotFound, NotOwner hoặc HoldExpired
+        BookingController-->>ConfirmPage: từ chối xác nhận (dữ liệu lượt đặt giữ nguyên), thông báo, cập nhật tình trạng sân
+    else hold hợp lệ
+        BookingService->>ScheduleService: recheckAvailability(hold.items)
+        ScheduleService->>Database: verifySlotsStillHeld(holdId)
+        Database-->>ScheduleService: ok hoặc conflict
+        ScheduleService-->>BookingService: valid hoặc conflict
+
+        alt có slot không còn hợp lệ
+            BookingService->>Database: ROLLBACK
+            BookingService-->>BookingController: SlotConflict
+            BookingController-->>ConfirmPage: từ chối xác nhận, cập nhật tình trạng sân
+        else các slot còn hợp lệ
+            BookingService->>Database: createBooking(CONFIRMED, source = online nếu isDirect = false, in-person nếu isDirect = true) + markSlotsBooked + closeHold
+            BookingService->>Database: COMMIT
+            Database-->>BookingService: booking
+            BookingService-->>BookingController: Booking (CONFIRMED)
+            BookingController-->>ConfirmPage: hiển thị trạng thái đã xác nhận
+        end
+    end

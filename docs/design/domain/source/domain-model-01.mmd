@@ -1,0 +1,90 @@
+classDiagram
+    direction TB
+
+    class User {
+        name
+        contact
+        passwordHash
+        role
+    }
+    class Facility {
+        name
+        address
+        description
+    }
+    class Sport {
+        name
+    }
+    class Amenity {
+        name
+    }
+    class OperatingHours {
+        dayOfWeek
+        openTime
+        closeTime
+    }
+    class Court {
+        name
+        status
+    }
+    class Price {
+        amount
+    }
+    class TimeSlot {
+        date
+        startTime
+        derivedStatus
+    }
+    class BlockedPeriod {
+        startTime
+        endTime
+    }
+    class Hold {
+        createdAt
+        expiresAt
+        status
+    }
+    class HoldItem {
+        startSlot
+        slotCount
+    }
+    class Booking {
+        status
+        source
+        createdAt
+        cancelReason
+    }
+    class BookingItem {
+        startSlot
+        slotCount
+    }
+    class Notification {
+        message
+        createdAt
+    }
+
+    User "1" --> "0..*" Facility : owns (role FacilityOwner)
+    Facility "*" --> "1" Sport : supports
+    Facility "*" --> "*" Amenity : offers
+    Facility "1" *-- "1..*" OperatingHours : opens
+    Facility "1" *-- "1..*" Court : has
+
+    Court "1" *-- "1..*" Price : priced by
+    Court "1" --> "*" BlockedPeriod : blocked by
+    Court "1" --> "*" TimeSlot : has
+
+    User "1" --> "*" Hold : creates
+    Hold "*" --> "1" Facility : at
+    Hold "1" *-- "1..*" HoldItem : includes
+    HoldItem "*" --> "1" Court : for
+    HoldItem ..> TimeSlot : covers
+    Hold "1" --> "0..1" Booking : becomes
+
+    User "1" --> "*" Booking : makes
+    Booking "*" --> "1" Facility : at
+    Booking "1" *-- "1..*" BookingItem : includes
+    BookingItem "*" --> "1" Court : for
+    BookingItem ..> TimeSlot : covers
+
+    User "1" --> "*" Notification : receives
+    Notification "*" --> "0..1" Booking : about

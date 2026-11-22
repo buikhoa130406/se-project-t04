@@ -2,6 +2,15 @@
 
 **Kế hoạch và phân công thống nhất ngày 10/11/2026.** Trang này là điểm bắt đầu để nhận việc PA3; nội dung chi tiết và tình trạng thực hiện nằm trong từng Issue.
 
+## Bản tổng hợp PA3 để review ngày 22/11/2026
+
+- [Word, PDF và danh mục nguồn thiết kế](../../pa/PA3/README.md).
+- [Danh sách kiểm tra bản tổng hợp](review/pa3-submission-review.md).
+- ADR nằm trong thư mục [adr](adr/); mỗi ADR có một file và một bảng riêng.
+- Tài liệu thiết kế trong các thư mục bên dưới đã được đồng bộ với bản Word tổng hợp. Nguồn chỉnh sửa sơ đồ có trong [diagram-sources](diagram-sources/README.md).
+- Bản tổng hợp sử dụng phần dữ liệu #10 do Trí hoàn thành ở PR #35 và giao tiếp #12 do Vĩ hoàn thành ở PR #34. Lịch sử giao lại cho Khôi được giữ trong Issue; bảng kế hoạch ban đầu bên dưới không thay thế tình trạng bàn giao thực tế.
+- Nhóm cần duyệt bản tổng hợp trước khi merge và nộp. Mã thử nghiệm #7 tiếp tục ở nhánh riêng; PR tổng hợp chỉ đưa tài liệu thiết kế và bản PA3 vào cấu trúc nộp bài.
+
 ## Bắt đầu nhận task
 
 1. Đọc [Quy tắc nhận task, thực hiện và review](../management/WORKING_AGREEMENT.md).

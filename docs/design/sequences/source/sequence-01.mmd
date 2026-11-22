@@ -1,0 +1,42 @@
+sequenceDiagram
+    actor P as Guest/Player
+    participant BookingPage
+    participant BookingController
+    participant AuthService
+    participant BookingService
+    participant ScheduleService
+    participant Database
+
+    P->>BookingPage: chọn sân/slot, bấm Proceed to booking
+    BookingPage->>BookingController: proceedToBooking(facilityId, selections)
+    BookingController->>AuthService: verifySession()
+
+    alt chưa đăng nhập
+        AuthService-->>BookingController: notAuthenticated
+        BookingController-->>BookingPage: yêu cầu đăng nhập (không tạo hold, đăng nhập xong về trang chủ chọn lại)
+    else đã đăng nhập
+        AuthService-->>BookingController: authenticated(userId, actorRole)
+        BookingController->>BookingService: createHold(userId, actorRole, facilityId, selections, isDirect = false)
+        BookingService->>ScheduleService: validateSelection(facilityId, selections, actorRole, isDirect = false, now)
+        Note over BookingService,ScheduleService: luật: cùng facilityId, sân còn hoạt động, slot 30 phút liên tiếp trên từng sân, trong giờ hoạt động, isDirect = false nên đặt trước >= 2 slot (60 phút)
+
+        alt vi phạm luật lựa chọn
+            ScheduleService-->>BookingService: invalid(reason)
+            BookingService-->>BookingController: SelectionInvalid(reason)
+            BookingController-->>BookingPage: báo lỗi, xóa lựa chọn, cập nhật tình trạng sân
+        else lựa chọn đúng luật
+            ScheduleService-->>BookingService: valid
+            BookingService->>Database: createHoldAtomically(userId, facilityId, selections, expiresAt = now + 5 phút)
+            Note over BookingService,Database: một transaction: kiểm tra mọi slot còn trống rồi ghi hold, tất cả hoặc không có gì
+
+            alt có slot đã bị giữ, đặt hoặc khóa (kể cả thua yêu cầu cùng lúc)
+                Database-->>BookingService: conflict(slots), rollback, không giữ slot nào
+                BookingService-->>BookingController: SelectionInvalid(slots)
+                BookingController-->>BookingPage: báo slot lỗi, xóa lựa chọn, cập nhật tình trạng sân
+            else giữ chỗ thành công
+                Database-->>BookingService: hold (expiresAt = now + 5 phút)
+                BookingService-->>BookingController: hold
+                BookingController-->>BookingPage: màn hình xác nhận + thời gian giữ chỗ còn lại
+            end
+        end
+    end

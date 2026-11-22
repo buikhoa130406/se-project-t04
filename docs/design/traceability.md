@@ -1,0 +1,77 @@
+# Traceability Update
+
+The matrix maps PA2 requirements, use cases and screens to PA3 design elements. Test case IDs will be assigned in PA4.
+
+— in the Test cases (PA4) column indicates that test case IDs will be assigned in PA4.
+
+Functional requirements
+
+| PA2 ID | PA2 use case(s) | PA2 screen(s) | PA3 design references | Test cases (PA4) |
+| --- | --- | --- | --- | --- |
+| FR-01 | UC-01, UC-02, UC-05 | SC-01, SC-02, SC-05, SC-06 | ASR-G4, C4-CMP, UI-03, UI-04, UI-06, CLS-01, SEQ-01, DB-TBL-01, API-AUTH | — |
+| FR-02 | UC-07, UC-08 | SC-07, SC-08 | ASR-G4, UI-09, UI-10, CLS-05, SEQ-03, API-BOOK | — |
+| FR-03 | UC-09, UC-10, UC-11, UC-12, UC-13 | SC-09, SC-10, SC-11, SC-12 | ASR-G4, DM-ENT-02, C4-CMP, UI-13, CLS-02, SEQ-04, SEQ-05, DB-TBL-04, API-AUTH, API-OWN | — |
+| FR-04 | UC-03 | SC-03 | ASR-G7, C4-CMP, UI-01, UI-02, CLS-02, DB-TBL-02, DB-TBL-04, API-FAC | — |
+| FR-05 | UC-03 | SC-03 | ASR-G7, DM-ENT-04, UI-02, CLS-02, DB-TBL-03, DB-TBL-05, API-FAC | — |
+| FR-06 | UC-04 | SC-04 | DM-ENT-02/03, UI-05, CLS-03, DB-TBL-07, API-FAC | — |
+| FR-07 | UC-04 | SC-04 | DM-ENT-06, UI-05, CLS-03, DB-TBL-08, DB-TBL-11, API-FAC, API-HOLD | — |
+| FR-08 | UC-04 | SC-04 | DM-ENT-07, STM-02, UI-06, API-FAC | — |
+| FR-09 | UC-05 | SC-05, SC-06 | ASR-G3, DM-INV-01/02, UI-06, CLS-05, SEQ-01, DB-TBL-11, API-HOLD | — |
+| FR-10 | UC-05, UC-13 | SC-05, SC-06, SC-12 | ASR-G3, DM-INV-05, STM-01, UI-07, CLS-04, SEQ-01, SEQ-05, DB-TBL-09, API-HOLD | — |
+| FR-11 | UC-06, UC-13 | SC-06, SC-12 | ASR-G1, STM-01, UI-07, CLS-04, SEQ-02, SEQ-05, DB-TBL-10, API-BOOK | — |
+| FR-12 | UC-06, UC-13 | SC-06, SC-12 | DM-INV-06, STM-03, UI-07/08, CLS-05, SEQ-02, SEQ-05, DB-TBL-10, API-BOOK | — |
+| FR-13 | UC-05 | SC-05, SC-06 | ASR-G1/G3, DM-INV-03/05, UI-06, CLS-04, CLS-08, SEQ-01, DB-TBL-11, API-01, API-HOLD | — |
+| FR-14 | UC-06 | SC-06 | ASR-G2, ARC-MAP, STM-01, UI-07, CLS-04, SEQ-02, SEQ-02B, DB-TBL-09, API-HOLD | — |
+| FR-15 | UC-06, UC-07 | SC-06, SC-07 | STM-03, UI-08/09, CLS-05, SEQ-02, API-BOOK | — |
+| FR-16 | UC-07, UC-08 | SC-07, SC-08 | STM-03, UI-09/10, CLS-05, SEQ-03, DB-TBL-10, DB-TBL-11, API-BOOK | — |
+| FR-17 | UC-09, UC-12 | SC-09, SC-10, SC-11 | DM-ENT-02/03, C4-CMP, UI-13, CLS-02, CLS-03, SEQ-04B, DB-TBL-04, DB-TBL-07, API-OWN | — |
+| FR-18 | UC-12 | SC-11 | ASR-G6, DM-ENT-05, STM-02, UI-14, CLS-02, SEQ-04B, DB-TBL-06, API-OWN | — |
+| FR-19 | UC-10 | SC-10 | DM-ENT-06, UI-13, CLS-03, DB-TBL-08, API-OWN | — |
+| FR-20 | UC-11 | SC-11 | ASR-G6, STM-02, UI-14, CLS-06, SEQ-04, DB-TBL-11, API-OWN | — |
+| FR-21 | UC-13 | SC-12 | ASR-G5, DM-ENT-09, UI-15, CLS-05, CLS-08, SEQ-05, DB-TBL-09, DB-TBL-10, API-OWN | — |
+| FR-22 | UC-11, UC-12, UC-13 | SC-11, SC-12 | ASR-G5, DM-INV-08, STM-02, C4-CMP, CLS-06, SEQ-04, SEQ-05, SEQ-04B, DB-TBL-11, API-OWN | — |
+| FR-23 | UC-02, UC-05 | SC-02, SC-05, SC-06 | ASR-G4, UI-03, UI-06, SEQ-01 | — |
+| FR-24 | UC-01, UC-02 | SC-01, SC-02 | ASR-G4, C4-CMP, UI-03/04, CLS-01, DB-TBL-01, API-AUTH | — |
+| FR-25 | UC-06 | SC-06 | ASR-G2, ARC-MAP, STM-01, UI-07, CLS-04, SEQ-02B, DB-TBL-09, API-HOLD | — |
+| FR-26 | UC-06 | SC-06 | ASR-G2, STM-01, UI-07, SEQ-02B; early detection to confirm | — |
+| FR-27 | UC-05, UC-13 | SC-05, SC-06, SC-12 | ASR-G3, STM-01, UI-06/15, CLS-08, SEQ-01, SEQ-05, API-HOLD, API-OWN | — |
+| FR-28 | UC-08 | SC-08 | ASR-G6, STM-03, UI-10, CLS-05, SEQ-03, DB-TBL-10, API-BOOK | — |
+| FR-29 | UC-11, UC-12 | SC-11 | ASR-G6, DM-INV-07, STM-02/03, UI-14, CLS-08, SEQ-04, SEQ-04B, DB-TBL-07, DB-TBL-10, API-OWN | — |
+| FR-30 | UC-07, UC-11, UC-12 | SC-07, SC-11 | ASR-G6, DM-ENT-12, ARC-MAP, UI-11/14, CLS-07, SEQ-04, SEQ-04B, DB-TBL-10, DB-TBL-12, API-NTF, API-OWN | — |
+| FR-31 | UC-06 | SC-06 | ASR-G2, STM-01, UI-07, SEQ-02, SEQ-02B, DB-TBL-09, API-01, API-HOLD | — |
+| FR-32 | UC-05 | SC-05, SC-06 | ASR-G3, STM-01, UI-06, CLS-08, SEQ-01, API-HOLD | — |
+
+Non-functional requirements
+
+| PA2 ID | PA2 use case(s) | PA2 screen(s) | PA3 design references | Test cases (PA4) |
+| --- | --- | --- | --- | --- |
+| NFR-01 | UC-01 through UC-13 | SC-01 through SC-12 | ASR-G8, C4-CNT, UI-ACC-01 | — |
+| NFR-02 | UC-05, UC-06, UC-13 | SC-05, SC-06, SC-12 | ASR-G1, DM-INV-03/08, PAT-04, CLS-08, SEQ-01, SEQ-02, SEQ-05, DB-TBL-11, DB-CON-01, DB-ATOM | — |
+| NFR-03 | UC-06, UC-13 | SC-06, SC-12 | ASR-G2, ARC-MAP, STM-01, PAT-05, UI-07, CLS-04, SEQ-02, SEQ-02B, SEQ-05; measurement pending, DB-BV-03, DB-Q07, API-HOLD | — |
+| NFR-04 | UC-02, UC-08, UC-09, UC-10, UC-11, UC-12, UC-13 | SC-02, SC-08, SC-09, SC-10, SC-11, SC-12 | ASR-G4, C4-CMP, PRI-05, CLS-01, SEQ-03, SEQ-04, SEQ-05, API-01, API-OWN | — |
+| NFR-05 | UC-01, UC-02 | SC-01, SC-02 | ASR-G9, DM-ENT-01, C4-CMP, CLS-01, DB-TBL-01, API-AUTH | — |
+| NFR-06 | UC-03, UC-04 | SC-03, SC-04 | ASR-G7, ARC-MAP, UI-02/06; measurement pending, DB-Q01, DB-Q03 | — |
+| NFR-07 | UC-03, UC-05, UC-06 | SC-03, SC-05, SC-06 | ASR-G7, UI-FLOW-01, UI-ACC-01; measurement pending | — |
+| NFR-08 | UC-04, UC-10, UC-11, UC-12, UC-13 | SC-04, SC-10, SC-11, SC-12 | ASR-G5, STM-02, UI-06/14/15, SEQ-04, SEQ-05, DB-Q03 | — |
+| NFR-09 | UC-07, UC-11, UC-12 | SC-07, SC-11 | ASR-G9, DM-ENT-12, C4-CMP, UI-11, CLS-07, SEQ-04, DB-TBL-12, API-NTF | — |
+
+Business rules
+
+| PA2 ID | PA2 use case(s) | PA2 screen(s) | PA3 design references | Test cases (PA4) |
+| --- | --- | --- | --- | --- |
+| BR-01 | UC-06 | SC-06 | ASR-G2, STM-01, UI-07, CLS-04, SEQ-02, SEQ-02B, DB-TBL-09, DB-BV-02, API-HOLD | — |
+| BR-02 | UC-05 | SC-05, SC-06 | DM-INV-03/08, STM-02, UI-06, CLS-04, SEQ-01, DB-TBL-11, DB-CON-01 | — |
+| BR-03 | UC-04, UC-05, UC-13 | SC-04, SC-05, SC-06, SC-12 | DM-INV-01/02, STM-01, UI-06, CLS-05, SEQ-01, SEQ-05, DB-TBL-11, DB-BV-01, API-HOLD | — |
+| BR-04 | UC-05 | SC-05, SC-06 | ASR-G3/G4, DM-INV-05, UI-06/07, SEQ-01 | — |
+| BR-05 | UC-05 | SC-05, SC-06 | ASR-G3, DM-INV-05, PAT-04, UI-06, CLS-08, SEQ-01, DB-ATOM | — |
+| BR-06 | UC-06 | SC-06 | DM-INV-06, STM-01/03, UI-07, SEQ-02, DB-CON-07 | — |
+| BR-07 | UC-06 | SC-06 | ASR-G2, STM-01, UI-07, SEQ-02B, DB-TBL-09, DB-BV-02 | — |
+| BR-08 | UC-05, UC-13 | SC-05, SC-06, SC-12 | ASR-G3, STM-01, UI-06/15, CLS-08, SEQ-01, SEQ-05, DB-BV-04 | — |
+| BR-09 | UC-08 | SC-08 | ASR-G6, STM-03, UI-10, CLS-05, SEQ-03, DB-BV-05, API-BOOK | — |
+| BR-10 | UC-09, UC-10, UC-11, UC-12, UC-13 | SC-09, SC-10, SC-11, SC-12 | ASR-G4, DM-ENT-02, UI-13, CLS-02, SEQ-04, SEQ-05, DB-TBL-04, DB-BV-10, API-OWN | — |
+| BR-11 | UC-11, UC-12 | SC-11 | ASR-G6, STM-02/03, UI-14, CLS-06, SEQ-04, SEQ-04B, DB-BV-07, DB-BV-08 | — |
+| BR-12 | UC-11 | SC-11 | ASR-G6, DM-ENT-11, STM-02, UI-14, CLS-06, SEQ-04, DB-BV-06 | — |
+| BR-13 | UC-11, UC-13 | SC-11, SC-12 | ASR-G5, DM-INV-08, C4-CMP, UI-15, CLS-06, SEQ-04, SEQ-05, DB-TBL-11, DB-CON-01, API-OWN | — |
+| BR-14 | UC-01, UC-02, UC-03, UC-04, UC-05 | SC-01, SC-02, SC-03, SC-04, SC-05, SC-06 | ASR-G4, UI-03/06, SEQ-01 | — |
+| BR-15 | UC-06 | SC-06 | CON-05, SEQ-02; no payment flow in this design | — |
+| BR-16 | UC-07, UC-11, UC-12 | SC-07, SC-11 | ASR-G9, DM-ENT-12, C4-CMP, UI-11, CLS-07, SEQ-04, DB-TBL-12, API-NTF | — |
