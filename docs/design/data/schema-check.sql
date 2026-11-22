@@ -233,7 +233,6 @@ BEGIN
   SELECT id INTO v_c2 FROM court WHERE name = 'Sân 2';
   SELECT id INTO v_u1 FROM app_user WHERE email = 'p1@example.com';
 
-  -- K10: Chọn 18:00 và 19:00 trên Sân 1 (bỏ 18:30) -> phát hiện khoảng hở
   SELECT EXISTS (
     SELECT 1 FROM (
       SELECT s, lag(e) OVER (PARTITION BY c ORDER BY s) AS prev_e
@@ -244,7 +243,6 @@ BEGIN
   IF v_has_err THEN RAISE NOTICE 'PASS  K10 chọn 18:00 và 19:00 trên cùng sân (bỏ 18:30) bị phát hiện';
   ELSE RAISE EXCEPTION 'FAIL  K10 không phát hiện khoảng hở'; END IF;
 
-  -- K10b: Hai item chồng nhau -> phát hiện
   SELECT EXISTS (
     SELECT 1 FROM (
       SELECT s, lag(e) OVER (PARTITION BY c ORDER BY s) AS prev_e
@@ -255,7 +253,6 @@ BEGIN
   IF v_has_err THEN RAISE NOTICE 'PASS  K10b hai item chồng nhau trên cùng sân bị phát hiện';
   ELSE RAISE EXCEPTION 'FAIL  K10b không phát hiện chồng nhau'; END IF;
 
-  -- K10c: 18:00 và 18:30 liền nhau trên Sân 1 -> hợp lệ
   SELECT EXISTS (
     SELECT 1 FROM (
       SELECT s, lag(e) OVER (PARTITION BY c ORDER BY s) AS prev_e
@@ -266,7 +263,6 @@ BEGIN
   IF NOT v_has_err THEN RAISE NOTICE 'PASS  K10c chọn 18:00 và 18:30 liền nhau trên cùng sân hợp lệ';
   ELSE RAISE EXCEPTION 'FAIL  K10c báo sai khoảng hở'; END IF;
 
-  -- K10c2: Sân 1 (18:00-18:30) và Sân 2 (19:00-19:30) khác sân -> hợp lệ
   SELECT EXISTS (
     SELECT 1 FROM (
       SELECT s, lag(e) OVER (PARTITION BY c ORDER BY s) AS prev_e
@@ -277,7 +273,6 @@ BEGIN
   IF NOT v_has_err THEN RAISE NOTICE 'PASS  K10c2 khác sân có khung giờ khác nhau vẫn hợp lệ';
   ELSE RAISE EXCEPTION 'FAIL  K10c2 báo sai khoảng hở giữa hai sân'; END IF;
 
-  -- K10d: DB tự nó vẫn chấp nhận 2 dải cách nhau nếu dịch vụ không chặn trước
   INSERT INTO hold (user_id, facility_id, source) VALUES (v_u1, v_fac, 'APP') RETURNING id INTO v_h;
   INSERT INTO schedule_entry (court_id, facility_id, start_time, end_time, entry_type, hold_id, unit_price)
     VALUES (v_c1, v_fac, '2026-12-12 18:00+07', '2026-12-12 18:30+07', 'HOLD', v_h, 100000),
@@ -287,7 +282,7 @@ BEGIN
   RAISE NOTICE 'PASS  K10d DB tự nó cho phép hai dải cách nhau nên bước kiểm tra lựa chọn ở dịch vụ là bắt buộc';
 END $$;
 
--- ---------- K9, K9b, K9c. Thông báo hủy (affected_items) ----------
+-- ---------- K9, K9b, K9c. Thông báo hủy (affected_items với courtId dạng chuỗi JSON) ----------
 DO $$
 DECLARE
   v_c1 bigint; v_c2 bigint; v_fac bigint; v_u1 bigint; v_owner bigint;
@@ -298,7 +293,6 @@ BEGIN
   SELECT id INTO v_u1 FROM app_user WHERE email = 'p1@example.com';
   SELECT id INTO v_owner FROM app_user WHERE email = 'owner@example.com';
 
-  -- K9: Khóa 18:00-18:30 Sân 1 hủy đơn 2 sân -> affected_items chỉ gồm Sân 1 (18:00-18:30)
   INSERT INTO hold (user_id, facility_id, source) VALUES (v_u1, v_fac, 'APP') RETURNING id INTO v_h;
   INSERT INTO schedule_entry (court_id, facility_id, start_time, end_time, entry_type, hold_id, unit_price)
     VALUES (v_c1, v_fac, '2026-12-15 18:00+07', '2026-12-15 19:00+07', 'HOLD', v_h, 100000),
@@ -326,13 +320,14 @@ BEGIN
   INSERT INTO notification (user_id, booking_id, reason, message, affected_items)
     VALUES (v_u1, v_b, 'BLOCKED_PERIOD', 'Chủ sân khóa Sân 1 khung 18:00-18:30', v_items);
 
-  IF jsonb_array_length(v_items) = 1 AND (v_items->0->>'courtId') = v_c1::text THEN
-    RAISE NOTICE 'PASS  K9 hủy đơn 2 sân do khóa 18:00-18:30 Sân 1: thông báo chỉ chứa đúng khung giờ đó của Sân 1';
+  IF jsonb_array_length(v_items) = 1
+     AND (v_items->0->>'courtId') = v_c1::text
+     AND jsonb_typeof(v_items->0->'courtId') = 'string' THEN
+    RAISE NOTICE 'PASS  K9 hủy đơn 2 sân do khóa 18:00-18:30 Sân 1: thông báo chỉ chứa đúng khung giờ đó của Sân 1 (courtId string)';
   ELSE
     RAISE EXCEPTION 'FAIL  K9 dữ liệu thông báo hủy không khớp: %', v_items;
   END IF;
 
-  -- K9b: Xóa Sân 2 liệt kê đúng dải trên Sân 2
   INSERT INTO hold (user_id, facility_id, source) VALUES (v_u1, v_fac, 'APP') RETURNING id INTO v_h;
   INSERT INTO schedule_entry (court_id, facility_id, start_time, end_time, entry_type, hold_id, unit_price)
     VALUES (v_c1, v_fac, '2026-12-16 18:00+07', '2026-12-16 19:00+07', 'HOLD', v_h, 100000),
@@ -352,14 +347,15 @@ BEGIN
   INSERT INTO notification (user_id, booking_id, reason, message, affected_items)
     VALUES (v_u1, v_b, 'COURT_DELETED', 'Chủ sân xóa Sân 2', v_items);
 
-  IF jsonb_array_length(v_items) = 1 AND (v_items->0->>'courtId') = v_c2::text THEN
-    RAISE NOTICE 'PASS  K9b xóa Sân 2 liệt kê đúng dải bị ảnh hưởng trên Sân 2';
+  IF jsonb_array_length(v_items) = 1
+     AND (v_items->0->>'courtId') = v_c2::text
+     AND jsonb_typeof(v_items->0->'courtId') = 'string' THEN
+    RAISE NOTICE 'PASS  K9b xóa Sân 2 liệt kê đúng dải bị ảnh hưởng trên Sân 2 (courtId string)';
   ELSE
     RAISE EXCEPTION 'FAIL  K9b dữ liệu thông báo xóa sân không khớp: %', v_items;
   END IF;
 END $$;
 
--- K9c: affected_items bắt buộc là mảng JSON
 SELECT t_expect('K9c affected_items không phải mảng JSON bị chặn', '23514',
   $q$INSERT INTO notification (user_id, booking_id, reason, message, affected_items)
      VALUES ((SELECT min(id) FROM app_user), (SELECT min(id) FROM booking), 'BLOCKED_PERIOD', 'test', '{}'::jsonb)$q$);
