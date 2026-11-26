@@ -1,0 +1,26 @@
+{
+  "document": "T04-PA3-SoftwareDesign.docx",
+  "pdf": "T04-PA3.pdf",
+  "revision_date": "2026-11-23",
+  "pages": 77,
+  "sha256": {
+    "T04-PA3-SoftwareDesign.docx": "74c57fcf5aa67e906d84227589bc44b131bd80425521066d623874ff63a66091",
+    "T04-PA3.pdf": "9b408454f41cd1ccd7f55c5d40e18cf627a9cb86b54c2e5e2ce42308efd3e857"
+  },
+  "submission_package": {
+    "file": "04.zip",
+    "sha256": "d6559fd2119dfc69023f5d90ba4654e8eea4921141a01c429ee78eb7eb59fa38",
+    "root_directory": "04/",
+    "file_count": 35,
+    "report_files": 2,
+    "source_files": 33,
+    "readme_files": 0,
+    "archive_integrity": "pass",
+    "content_matches_commit": "4669d3f8dcfd22faf5b33866b524bb819adc69d9",
+    "reports_match": "byte-exact",
+    "text_sources_match": "LF/CRLF normalized when needed",
+    "text_files_with_line_ending_differences": 13,
+    "checked_on": "2026-11-23",
+    "submission_confirmation": "Khoa reported submitting the package on Moodle."
+  }
+}

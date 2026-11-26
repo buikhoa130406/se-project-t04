@@ -1,0 +1,6 @@
+stateDiagram-v2
+    [*] --> Confirmed : confirmBooking (player hoặc owner nhập tại quầy)
+    Confirmed --> CancelledByPlayer : cancelBooking (từ 3 giờ trước giờ bắt đầu)
+    Confirmed --> CancelledByOwner : khóa slot / xóa sân / đổi giờ (từ 24 giờ trước)
+    CancelledByPlayer --> [*]
+    CancelledByOwner --> [*]

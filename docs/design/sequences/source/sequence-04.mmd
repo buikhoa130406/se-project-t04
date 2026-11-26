@@ -1,0 +1,37 @@
+sequenceDiagram
+    actor Player
+    participant BookingDetailPage
+    participant BookingController
+    participant BookingService
+    participant Database
+
+    Player->>BookingDetailPage: bấm Cancel (có thể nhập lý do)
+    BookingDetailPage->>BookingController: cancelBooking(bookingId, reason?)
+    BookingController->>BookingService: cancelBookingByPlayer(userId, bookingId, reason?)
+    BookingService->>Database: BEGIN transaction
+    BookingService->>Database: getBookingForUpdate(bookingId)
+    Database-->>BookingService: booking hoặc notFound
+
+    alt không tồn tại
+        BookingService->>Database: ROLLBACK
+        BookingService-->>BookingController: BookingNotFound
+        BookingController-->>BookingDetailPage: từ chối hủy
+    else không phải chủ booking
+        BookingService->>Database: ROLLBACK
+        BookingService-->>BookingController: NotOwner
+        BookingController-->>BookingDetailPage: từ chối hủy
+    else booking không ở trạng thái CONFIRMED
+        BookingService->>Database: ROLLBACK
+        BookingService-->>BookingController: InvalidState
+        BookingController-->>BookingDetailPage: từ chối hủy
+    else còn dưới 3 giờ trước slot sớm nhất
+        BookingService->>Database: ROLLBACK
+        BookingService-->>BookingController: CancelDeadlinePassed
+        BookingController-->>BookingDetailPage: từ chối hủy
+    else đúng chủ, còn ít nhất 3 giờ (đúng 3 giờ vẫn được)
+        BookingService->>Database: setStatus(CANCELLED_BY_PLAYER, reason) + releaseSlots
+        BookingService->>Database: COMMIT
+        Database-->>BookingService: ok
+        BookingService-->>BookingController: Booking (CANCELLED_BY_PLAYER)
+        BookingController-->>BookingDetailPage: hủy thành công, lịch được cập nhật
+    end

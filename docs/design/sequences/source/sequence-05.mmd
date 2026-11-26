@@ -1,0 +1,74 @@
+sequenceDiagram
+    actor FacilityOwner
+    participant CourtSchedulePage
+    participant FacilityController
+    participant AuthService
+    participant ScheduleService
+    participant BookingService
+    participant NotificationService
+    participant Database
+
+    FacilityOwner->>CourtSchedulePage: chọn sân và khoảng thời gian cần khóa
+    CourtSchedulePage->>FacilityController: previewBlock(courtId, period)
+    FacilityController->>AuthService: verifyFacilityOwner(userId, facilityId)
+
+    alt không quản lý cơ sở này
+        AuthService-->>FacilityController: notAllowed
+        FacilityController-->>CourtSchedulePage: từ chối thao tác, dữ liệu không đổi
+    else là chủ cơ sở
+        AuthService-->>FacilityController: authorized
+        FacilityController->>ScheduleService: previewChange(block(courtId, period), now)
+        ScheduleService->>Database: queryAffectedHoldsAndBookings(courtId, period)
+        Database-->>ScheduleService: affectedBookings, affectedHolds
+
+        alt khoảng khóa bắt đầu trong dưới 24 giờ
+            ScheduleService-->>FacilityController: Rejected(BlockTooSoon)
+            FacilityController-->>CourtSchedulePage: từ chối thay đổi
+        else có booking bị ảnh hưởng với giờ bắt đầu sớm nhất dưới 24 giờ
+            ScheduleService-->>FacilityController: Rejected(AffectedTooSoon)
+            FacilityController-->>CourtSchedulePage: từ chối toàn bộ, không hủy booking nào
+        else còn hold bị ảnh hưởng
+            ScheduleService-->>FacilityController: HoldsPending
+            FacilityController-->>CourtSchedulePage: chờ hold kết thúc hoặc được xác nhận rồi thử lại
+        else thay đổi hợp lệ
+            ScheduleService-->>FacilityController: preview(affectedBookings, affectedPortions)
+            FacilityController-->>CourtSchedulePage: danh sách booking sẽ bị hủy, phần bị ảnh hưởng và cảnh báo
+
+            alt chủ sân xác nhận
+                FacilityOwner->>CourtSchedulePage: xác nhận
+                CourtSchedulePage->>FacilityController: confirmBlock(courtId, period, confirmedBookings)
+                FacilityController->>AuthService: verifyFacilityOwner(userId, facilityId)
+                AuthService-->>FacilityController: authorized
+                FacilityController->>ScheduleService: applyChange(block(courtId, period), confirmedBookings, now)
+                ScheduleService->>Database: BEGIN transaction
+                ScheduleService->>Database: recheckHoldsAndAffected(courtId, period)
+                Database-->>ScheduleService: recheckResult(holds, affectedBookingsNow)
+
+                alt phát sinh hold mới hoặc có booking bị ảnh hưởng vi phạm 24 giờ
+                    ScheduleService->>Database: ROLLBACK
+                    ScheduleService-->>FacilityController: Rejected(HoldsPending hoặc AffectedTooSoon)
+                    FacilityController-->>CourtSchedulePage: báo lý do, chờ hold kết thúc hoặc từ chối toàn bộ, không hủy booking nào
+                else danh sách booking bị ảnh hưởng đã khác danh sách chủ sân xác nhận
+                    ScheduleService->>Database: ROLLBACK
+                    ScheduleService-->>FacilityController: ListChanged(newAffectedBookings, newAffectedPortions)
+                    FacilityController-->>CourtSchedulePage: hiển thị danh sách mới và cảnh báo, không hủy booking nào
+                    Note over FacilityOwner,CourtSchedulePage: chủ sân xem danh sách mới rồi xác nhận lại, quay về bước confirmBlock
+                else danh sách khớp và hợp lệ
+                    ScheduleService->>BookingService: cancelAffected(confirmedBookings, reason)
+                    BookingService->>Database: setStatus(CANCELLED_BY_OWNER) + releaseSlots
+                    Database-->>BookingService: ok
+                    BookingService-->>ScheduleService: ok
+                    ScheduleService->>Database: createBlockedPeriod(courtId, period)
+                    ScheduleService->>NotificationService: notify(players, reason, booking, slots)
+                    NotificationService->>Database: insertInAppNotifications
+                    Database-->>NotificationService: ok
+                    NotificationService-->>ScheduleService: ok
+                    ScheduleService->>Database: COMMIT
+                    ScheduleService-->>FacilityController: BlockApplied
+                    FacilityController-->>CourtSchedulePage: lịch được cập nhật
+                end
+            else chủ sân không xác nhận
+                CourtSchedulePage-->>FacilityOwner: đóng cảnh báo, lịch không đổi
+            end
+        end
+    end

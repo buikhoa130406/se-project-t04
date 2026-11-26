@@ -1,0 +1,10 @@
+stateDiagram-v2
+    [*] --> Active : createHold
+    Active --> Confirmed : confirm before fixed expiry
+    Active --> Released : explicit or detected abandonment; release succeeds
+    Active --> Expired : fixed expiry or release pending
+    state "Expired / release pending (EXPIRED)" as Expired
+    Expired --> Released : transactional release succeeds
+    Expired --> Expired : release failure; retry
+    Confirmed --> [*]
+    Released --> [*]

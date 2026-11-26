@@ -1,0 +1,57 @@
+sequenceDiagram
+    actor FacilityOwner
+    participant BookingPage
+    participant BookingController
+    participant AuthService
+    participant BookingService
+    participant ScheduleService
+    participant Database
+
+    FacilityOwner->>BookingPage: chọn sân/slot tại cơ sở của mình, bấm Proceed to booking
+    BookingPage->>BookingController: proceedToBooking(facilityId, selections)
+    BookingController->>AuthService: verifyFacilityOwner(userId, facilityId)
+
+    alt không quản lý cơ sở này
+        AuthService-->>BookingController: notAllowed
+        BookingController-->>BookingPage: từ chối (không tạo hold)
+    else là chủ cơ sở
+        AuthService-->>BookingController: authorized
+        BookingController->>BookingService: createHold(userId, FacilityOwner, facilityId, selections, isDirect = true)
+        BookingService->>ScheduleService: validateSelection(facilityId, selections, FacilityOwner, isDirect = true, now)
+        Note over BookingService,ScheduleService: isDirect = true tại cơ sở quản lý nên được miễn giới hạn đặt trước 2 slot (đặt trước 30 phút vẫn hợp lệ theo AC-25), các luật khác như SEQ-01
+
+        alt vi phạm luật lựa chọn
+            ScheduleService-->>BookingService: invalid(reason)
+            BookingService-->>BookingController: SelectionInvalid(reason)
+            BookingController-->>BookingPage: báo lỗi, không giữ slot nào, xóa lựa chọn
+        else lựa chọn đúng luật
+            ScheduleService-->>BookingService: valid
+            BookingService->>Database: createHoldAtomically(userId, facilityId, selections, expiresAt = now + 5 phút)
+            Note over BookingService,Database: một transaction: kiểm tra mọi slot còn trống rồi ghi hold, không đè slot held, booked hoặc unavailable
+
+            alt slot đang held, booked hoặc unavailable
+                Database-->>BookingService: conflict(slots), rollback, không giữ slot nào
+                BookingService-->>BookingController: SelectionInvalid(slots)
+                BookingController-->>BookingPage: báo slot lỗi, xóa lựa chọn
+            else giữ chỗ thành công
+                Database-->>BookingService: hold (expiresAt = now + 5 phút)
+                BookingService-->>BookingController: hold
+                BookingController-->>BookingPage: màn hình xác nhận + thời gian giữ chỗ còn lại
+
+                FacilityOwner->>BookingPage: bấm Confirm booking
+                BookingPage->>BookingController: confirmBooking(holdId)
+                BookingController->>BookingService: confirmBooking(userId, holdId, isDirect = true)
+                Note over BookingController,BookingService: isDirect = true chỉ được truyền sau khi đã kiểm tra quyền sở hữu cơ sở. Kiểm tra hold và slot trong một transaction như SEQ-02
+
+                alt xác nhận bị từ chối (HoldNotFound, NotOwner, HoldExpired hoặc SlotConflict)
+                    BookingService-->>BookingController: HoldNotFound, NotOwner, HoldExpired hoặc SlotConflict
+                    BookingController-->>BookingPage: từ chối xác nhận, cập nhật tình trạng sân
+                else xác nhận thành công
+                    BookingService->>Database: createBooking(CONFIRMED, source = in-person) + markSlotsBooked + closeHold
+                    Database-->>BookingService: booking
+                    BookingService-->>BookingController: Booking (CONFIRMED)
+                    BookingController-->>BookingPage: booking đã ghi vào lịch chung
+                end
+            end
+        end
+    end

@@ -1,0 +1,11 @@
+stateDiagram-v2
+    [*] --> Available
+    Available --> Held : createHold
+    Held --> Available : hold được nhả
+    Held --> Booked : confirmBooking
+    Booked --> Available : player hủy booking
+    Booked --> Available : owner hủy toàn bộ đơn, slot nằm ngoài phần bị thay đổi
+    Booked --> Unavailable : owner khóa slot / đổi giờ / xóa sân (slot bị ảnh hưởng)
+    Available --> Unavailable : owner khóa slot (trước >= 24h) / đổi giờ hoặc xóa sân
+    Unavailable --> Available : owner mở rộng giờ mở cửa và slot không còn lý do nào khác (không còn trong BlockedPeriod, sân còn hoạt động)
+    Unavailable --> Unavailable : owner mở rộng giờ mở cửa nhưng slot vẫn nằm trong BlockedPeriod

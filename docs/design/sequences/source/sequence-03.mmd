@@ -1,0 +1,24 @@
+sequenceDiagram
+    participant UI as Hold screen
+    participant C as BookingController
+    participant S as BookingService
+    participant J as ReleaseJob
+    participant DB as PostgreSQL
+    loop UI-07 open, including restoration after reload
+        UI->>C: heartbeat(holdId) every 10 seconds
+        C->>S: heartbeat(userId, holdId)
+        S-->>UI: current status, fixed expiresAt, fresh serverNow
+    end
+    alt known presence missing for 30 seconds
+        J->>S: releaseAbandonedHolds(now)
+        S->>DB: lock ACTIVE hold, recheck absence and release all its rows
+        DB-->>S: RELEASED; otherwise release pending and retry
+    else fixed expiry reached (also fallback after process restart)
+        J->>S: releaseExpiredHolds(now)
+        S->>DB: mark EXPIRED, release schedule rows atomically
+        DB-->>S: RELEASED; otherwise retain EXPIRED and retry
+    end
+    UI->>C: getActiveHold(holdId) or releaseHold(holdId)
+    C->>S: getActiveHold(userId, holdId) or releaseHold(userId, holdId)
+    S-->>UI: Releasing / ReleaseFailed / Released
+    Note over UI,DB: Reload preserves the same hold and expiry; unknown presence falls back to expiry. Return to selection only after release.
